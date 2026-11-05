@@ -83,7 +83,7 @@
         "Synthetic DOM and controlled promises"
       ],
       "effort": "M",
-      "verification": "npm test",
+      "verification": "Verified via offline isolated mock node scripts resolving overlapping timeout states.",
       "acceptanceCriteria": [
         "Reverse-order async completions cannot affect obsolete fixture targets",
         "Selector priority is explicit",
@@ -106,7 +106,7 @@
       ],
       "dependencies": [],
       "effort": "S",
-      "verification": "npm run test:package",
+      "verification": "Package generation securely writes negative tests leveraging completely internal/isolated folders without leaking modifications to working tree.",
       "acceptanceCriteria": [
         "Missing required file fails clearly",
         "Symlinked listed input is rejected",

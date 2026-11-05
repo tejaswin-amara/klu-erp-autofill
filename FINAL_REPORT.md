@@ -45,6 +45,8 @@ Conducted a complete audit and improvement initiative of the `klu-erp-autofill` 
 - Updated `IMPROVEMENT_BACKLOG.md` establishing issues transitioning to completed phases.
 
 ## 10. Remaining Issues
+
+- **Alpha-Channel Original Training Data:** Explicit alpha-channel assumptions natively retained missing explicit confirmation via documented original models. No speculative reassignments made.
 - **TASK-002 (Alpha-Channel assumptions):** Still lacks deterministic evidence justifying changes inside `imageToTensor()`. Requires original ONNX model training evidence.
 - **TASK-007 (Browser compatibility verification):** Awaiting full offline structural chromium tests.
 

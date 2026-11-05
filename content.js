@@ -123,10 +123,16 @@
     return result;
   }
 
+  let lastFilledValue = "";
   function fillInput(el, value) {
+    if (el.value !== "" && el.value !== lastFilledValue) {
+       // Value was manually entered by the user
+       return;
+    }
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     if (setter) setter.call(el, value);
     else el.value = value;
+    lastFilledValue = value;
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
   }
@@ -152,7 +158,13 @@
       const currentSrc = img.src;
       const tensor = imageToTensor(img);
       const output = await session.run({ input: tensor });
+      if (!output || !output.logits || !output.logits.dims || output.logits.dims.length !== 3) {
+         throw new Error("Invalid ONNX output shape");
+      }
       const [, T, C] = output.logits.dims;
+      if (C !== meta.alphabet.length + 1) {
+         throw new Error("Invalid ONNX output classes");
+      }
       const code = ctcGreedyDecode(output.logits.data, T, C, meta.alphabet, meta.blank_idx);
 
       // Ensure target element is still the same and generation matches
@@ -184,32 +196,42 @@
     }
   });
 
+  const imgLoadListener = () => {
+    currentSolveGeneration++;
+    if (!isSolving) solveCaptcha();
+  };
+
   function watchImage(img) {
     if (observedImg === img) return;
     if (observedImg) {
-      observedImg.removeEventListener("load", solveCaptcha);
+      observedImg.removeEventListener("load", imgLoadListener);
     }
     observedImg = img;
     imgAttrObserver.disconnect();
-    imgAttrObserver.observe(img, { attributes: true, attributeFilter: ["src"] });
-    img.addEventListener("load", () => {
+    if (img) {
+      imgAttrObserver.observe(img, { attributes: true, attributeFilter: ["src"] });
+      img.addEventListener("load", imgLoadListener);
+    }
+  }
+
+  const documentObserver = new MutationObserver(() => {
+    const currentImg = findElementByPriority(IMG_SELECTORS, false);
+    const currentInput = findElementByPriority(INPUT_SELECTORS, true);
+    if (!currentImg || !currentInput) return;
+
+    if (observedImg !== currentImg) {
        currentSolveGeneration++;
        if (!isSolving) solveCaptcha();
-    });
-  }
+    } else {
+       // Just kick off solving if they exist and aren't running
+       if (!isSolving && currentImg.src !== lastSolvedSrc) {
+           solveCaptcha();
+       }
+    }
+  });
 
   if (findElementByPriority(IMG_SELECTORS, false) && findElementByPriority(INPUT_SELECTORS, true)) {
     solveCaptcha();
-  } else {
-    let timeoutId;
-    const bodyObserver = new MutationObserver(() => {
-      if (findElementByPriority(IMG_SELECTORS, false) && findElementByPriority(INPUT_SELECTORS, true)) {
-        bodyObserver.disconnect();
-        clearTimeout(timeoutId);
-        solveCaptcha();
-      }
-    });
-    bodyObserver.observe(document.documentElement, { childList: true, subtree: true });
-    timeoutId = setTimeout(() => bodyObserver.disconnect(), 15000);
   }
+  documentObserver.observe(document.documentElement, { childList: true, subtree: true });
 })();

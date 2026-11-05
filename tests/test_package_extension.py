@@ -98,69 +98,64 @@ class PackageExtensionTests(unittest.TestCase):
 
 
     def test_missing_allowlisted_file_raises_error(self) -> None:
-        test_packager = ROOT / "scripts" / "test_packager.py"
+        temp_root = Path(self.temp_dir.name) / "mock_root"
+        temp_root.mkdir(parents=True, exist_ok=True)
+        test_packager = temp_root / "test_packager.py"
+
         packager_content = PACKAGER.read_text()
         packager_content = packager_content.replace(
+            'ROOT = Path(__file__).resolve().parents[1]',
+            f'ROOT = Path("{temp_root.as_posix()}")'
+        ).replace(
             'RELEASE_FILES = (',
             'RELEASE_FILES = ("non_existent_file.txt", '
         )
         test_packager.write_text(packager_content)
 
-        try:
-            result = subprocess.run(
-                [sys.executable, str(test_packager), "--output", str(self.output)],
-                cwd=ROOT,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+        result = subprocess.run(
+            [sys.executable, str(test_packager), "--output", str(self.output)],
+            cwd=temp_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
 
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Required release file is missing", result.stderr)
-            self.assertFalse(self.output.exists())
-            self.assertFalse(self.output.with_suffix('.tmp').exists())
-        finally:
-            if test_packager.exists():
-                test_packager.unlink()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Required release file is missing", result.stderr)
+        self.assertFalse(self.output.exists())
+        self.assertFalse(self.output.with_suffix('.tmp').exists())
 
     def test_symlinked_allowlisted_file_raises_error(self) -> None:
-        import os
+        temp_root = Path(self.temp_dir.name) / "mock_root"
+        temp_root.mkdir(parents=True, exist_ok=True)
+        test_packager = temp_root / "test_packager.py"
 
-        symlink_path = ROOT / "test_symlink.txt"
-        target_path = ROOT / "test_target.txt"
+        symlink_path = temp_root / "test_symlink.txt"
+        target_path = temp_root / "test_target.txt"
         target_path.write_text("dummy")
-        try:
-            symlink_path.symlink_to(target_path)
+        symlink_path.symlink_to(target_path)
 
-            # Create a modified packager script for testing to avoid mocking across subprocess boundaries
-            test_packager = ROOT / "scripts" / "test_packager.py"
-            packager_content = PACKAGER.read_text()
-            packager_content = packager_content.replace(
-                'RELEASE_FILES = (',
-                'RELEASE_FILES = ("test_symlink.txt", '
-            )
-            test_packager.write_text(packager_content)
+        packager_content = PACKAGER.read_text()
+        packager_content = packager_content.replace(
+            'ROOT = Path(__file__).resolve().parents[1]',
+            f'ROOT = Path("{temp_root.as_posix()}")'
+        ).replace(
+            'RELEASE_FILES = (',
+            'RELEASE_FILES = ("test_symlink.txt", '
+        )
+        test_packager.write_text(packager_content)
 
-            result = subprocess.run(
-                [sys.executable, str(test_packager), "--output", str(self.output)],
-                cwd=ROOT,
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+        result = subprocess.run(
+            [sys.executable, str(test_packager), "--output", str(self.output)],
+            cwd=temp_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
 
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Refusing to package symlink", result.stderr)
-            self.assertFalse(self.output.exists())
-
-        finally:
-            if symlink_path.exists():
-                symlink_path.unlink()
-            if target_path.exists():
-                target_path.unlink()
-            test_packager = ROOT / "scripts" / "test_packager.py"
-            if test_packager.exists():
-                test_packager.unlink()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing to package symlink", result.stderr)
+        self.assertFalse(self.output.exists())
 
     def test_output_collision_with_source_file_fails_safely(self) -> None:
         source_file = ROOT / "content.js"
