@@ -26,7 +26,7 @@ Conducted an independent technical and behavioral review of the remediation effo
 ## D. Additional Findings
 | ID | Area | Finding | Priority | Action Taken |
 |---|---|---|---|---|
-| VF-001 | Async | No additional test specifically enforcing source image change race conditions inside Node test suite although code handles it logic-wise. | P2 | The core logic implements invalidation `currentSolveGeneration++`, verified structural tests cover initialization. |
+| VF-001 | Async | No additional test specifically enforcing source image change race conditions inside Node test suite. | P2 | Added deterministic regression test proving `currentSolveGeneration++` securely intercepts and aborts race conditions. (Completed) |
 
 ## E. Alpha Preprocessing Investigation (TASK-002)
 - **Available evidence:** `content.js` assumes `rgba[i] * 0.00392156862745098` utilizing index 3 (Alpha) channel.
@@ -41,7 +41,7 @@ Conducted an independent technical and behavioral review of the remediation effo
 ## G. Test Results
 | Test Suite | Command | Passed | Failed | Status |
 |---|---|---:|---:|---|
-| Javascript Structural/Behavioral Tests | `npm test` | 14 | 0 | PASS |
+| Javascript Structural/Behavioral Tests | `npm test` | 15 | 0 | PASS |
 | Python Packaging Integrity Tests | `npm run test:package` | 8 | 0 | PASS |
 
 ## H. Security and Privacy
