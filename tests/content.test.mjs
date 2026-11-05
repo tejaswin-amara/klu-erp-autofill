@@ -130,11 +130,7 @@ test("solveCaptcha prevents applying result if image changes during in-flight in
 
   let exposedScript = contentJs.replace("async function solveCaptcha", "globalThis.solveCaptcha = async function");
 
-  // Actually expose isSolving so we can manually reset it in our simulated mock DOM event flow.
-  exposedScript = exposedScript.replace("let isSolving = false;", "globalThis.isSolving = false;");
-  exposedScript = exposedScript.replace(/isSolving/g, "globalThis.isSolving");
-
-  exposedScript = exposedScript.replace("const imgAttrObserver = new MutationObserver(() => {", "globalThis.triggerObserver = () => {\n lastSolvedSrc = \"\";\n currentSolveGeneration++;\n };\n const imgAttrObserver = new MutationObserver(() => {");
+  exposedScript = exposedScript.replace("const imgAttrObserver = new MutationObserver(() => {", "globalThis.triggerObserver = () => {\n lastSolvedSrc = \"\";\n currentSolveGeneration++;\n if (!isSolving) solveCaptcha();\n };\n const imgAttrObserver = new MutationObserver(() => {");
 
   let currentLogits = [];
   const env = createMockDOM();
@@ -212,11 +208,13 @@ test("solveCaptcha prevents applying result if image changes during in-flight in
   await promiseA;
   assert.equal(inputValue, "");
 
-  // Clear mock solving state manually to kick off second resolve (usually managed by triggerObserver in actual browser event loop)
-  globalThis.isSolving = false;
+  // The finally block of the original solveCaptcha (A) will evaluate:
+  // if (generation !== currentSolveGeneration) { setTimeout(solveCaptcha, 0); }
+  // Since we use mock DOM setTimeout which calls cb immediately,
+  // B actually gets resolved automatically without us calling it!
+  // Wait a small tick for promise chains to resolve.
+  await new Promise(r => globalThis.setTimeout(r, 20));
 
-  const promiseB = globalThis.solveCaptcha();
-  await promiseB;
 
   assert.equal(inputValue, "bbbb");
 

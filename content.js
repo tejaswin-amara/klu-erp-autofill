@@ -144,7 +144,7 @@
     if (img.src && img.src === lastSolvedSrc && input.value.length >= 4) return;
 
     isSolving = true;
-    const generation = ++currentSolveGeneration;
+    let generation = ++currentSolveGeneration;
     try {
       await ensureModel();
       if (generation !== currentSolveGeneration) return; // Stale
@@ -169,13 +169,19 @@
       console.error("[KLU-Captcha]", err);
     } finally {
       isSolving = false;
+      // If generation got bumped while solving, schedule another execution.
+      if (generation !== currentSolveGeneration) {
+        setTimeout(solveCaptcha, 0);
+      }
     }
   }
 
   const imgAttrObserver = new MutationObserver(() => {
     lastSolvedSrc = "";
     currentSolveGeneration++; // invalidate in-flight inference on src change
-    solveCaptcha();
+    if (!isSolving) {
+      solveCaptcha();
+    }
   });
 
   function watchImage(img) {
@@ -186,7 +192,10 @@
     observedImg = img;
     imgAttrObserver.disconnect();
     imgAttrObserver.observe(img, { attributes: true, attributeFilter: ["src"] });
-    img.addEventListener("load", solveCaptcha);
+    img.addEventListener("load", () => {
+       currentSolveGeneration++;
+       if (!isSolving) solveCaptcha();
+    });
   }
 
   if (findElementByPriority(IMG_SELECTORS, false) && findElementByPriority(INPUT_SELECTORS, true)) {
