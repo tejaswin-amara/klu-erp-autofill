@@ -1,7 +1,6 @@
-/* KLU ERP Captcha Auto-Fill — Surgical On-Device CRNN Solver */
+/* KLU ERP CAPTCHA Auto-Fill — local CRNN inference */
 (() => {
   if (window.__kluCaptchaSolverLoaded) return;
-  window.__kluCaptchaSolverLoaded = true;
 
   ort.env.wasm.wasmPaths = chrome.runtime.getURL("lib/");
   ort.env.wasm.numThreads = 1;
@@ -12,7 +11,6 @@
     'img[src*="r=site/captcha"]',
     'img[src*="captcha"]'
   ];
-
   const INPUT_SELECTORS = [
     'input#loginFormCaptcha',
     'input[name="LoginForm[captcha]"]',
@@ -21,217 +19,311 @@
     'input[placeholder*="verification" i]'
   ];
 
-  function findElementByPriority(selectors, isInput = false) {
-    for (const selector of selectors) {
-      const elements = document.querySelectorAll(selector);
-      for (const el of elements) {
-        if (!el.isConnected) continue;
-        if (isInput) {
-          if (el.type === 'hidden' || el.disabled || el.readOnly) continue;
-        } else {
-          // Extra checks for img if needed
-        }
-        // Basic visibility check
-        const rect = el.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          return el;
-        }
-      }
-    }
-    return null;
-  }
-
   let session = null;
   let meta = null;
   let loadingPromise = null;
   let tensorBuffer = null;
   let drawCtx = null;
+
+  let activeImage = null;
+  let activeInput = null;
+  let activeImageLoadHandler = null;
+  let activeInputHandler = null;
+  let imageObserver = null;
+  let documentObserver = null;
+
   let isSolving = false;
+  let solveRequested = false;
   let currentSolveGeneration = 0;
   let lastSolvedSrc = "";
-  let observedImg = null;
+  let lastWrittenValue = null;
+  let inputWasEdited = false;
+  let writingInput = false;
+
+  function imageSource(img) {
+    return img ? (img.currentSrc || img.src || "") : "";
+  }
+
+  function isVisible(el) {
+    if (!el || !el.isConnected) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function findElementByPriority(selectors, isInput = false) {
+    for (const selector of selectors) {
+      for (const el of document.querySelectorAll(selector)) {
+        if (!isVisible(el)) continue;
+        if (isInput && (el.type === "hidden" || el.disabled || el.readOnly)) continue;
+        return el;
+      }
+    }
+    return null;
+  }
+
+  function requestSolve() {
+    currentSolveGeneration += 1;
+    solveRequested = true;
+    if (!isSolving) void drainSolves();
+  }
+
+  function onImageLoad() {
+    if (activeImage && this === activeImage) requestSolve();
+  }
+
+  function onImageSourceChange() {
+    lastSolvedSrc = "";
+    requestSolve();
+  }
+
+  function onInputChange() {
+    if (!writingInput) inputWasEdited = true;
+  }
+
+  function bindImage(nextImage) {
+    if (activeImage === nextImage) return false;
+
+    if (activeImage) {
+      if (activeImageLoadHandler) {
+        activeImage.removeEventListener("load", activeImageLoadHandler);
+      }
+      if (imageObserver) imageObserver.disconnect();
+    }
+
+    activeImage = nextImage;
+    activeImageLoadHandler = null;
+
+    if (activeImage) {
+      activeImageLoadHandler = onImageLoad;
+      activeImage.addEventListener("load", activeImageLoadHandler);
+      if (imageObserver) {
+        imageObserver.observe(activeImage, { attributes: true, attributeFilter: ["src", "srcset"] });
+      }
+    }
+
+    lastSolvedSrc = "";
+    return true;
+  }
+
+  function bindInput(nextInput) {
+    if (activeInput === nextInput) return false;
+
+    if (activeInput && activeInputHandler) {
+      activeInput.removeEventListener("input", activeInputHandler);
+      activeInput.removeEventListener("change", activeInputHandler);
+    }
+
+    activeInput = nextInput;
+    activeInputHandler = null;
+    lastWrittenValue = null;
+    inputWasEdited = false;
+
+    if (activeInput) {
+      activeInputHandler = onInputChange;
+      activeInput.addEventListener("input", activeInputHandler);
+      activeInput.addEventListener("change", activeInputHandler);
+    }
+    return true;
+  }
+
+  function reconcileDom() {
+    const nextImage = findElementByPriority(IMG_SELECTORS, false);
+    const nextInput = findElementByPriority(INPUT_SELECTORS, true);
+    const imageChanged = bindImage(nextImage);
+    const inputChanged = bindInput(nextInput);
+    if (imageChanged || inputChanged) requestSolve();
+  }
 
   async function ensureModel() {
     if (session) return;
     if (!loadingPromise) {
       loadingPromise = (async () => {
-        const metaRes = await fetch(chrome.runtime.getURL("model/crnn.json"));
-        if (!metaRes.ok) throw new Error("Metadata fetch failed: " + metaRes.status);
-        meta = await metaRes.json();
-        if (typeof meta.blank_idx !== "number" || typeof meta.alphabet !== "string") {
-            throw new Error("Invalid model metadata");
+        const response = await fetch(chrome.runtime.getURL("model/crnn.json"));
+        if (!response.ok) throw new Error(`Metadata fetch failed: ${response.status}`);
+        const loadedMeta = await response.json();
+        if (!loadedMeta || typeof loadedMeta !== "object" || Array.isArray(loadedMeta)) {
+          throw new Error("Invalid model metadata object");
         }
-        const W = meta.img_w;
-        const H = meta.img_h;
-        tensorBuffer = new Float32Array(W * H);
+        const { img_w: width, img_h: height, alphabet, blank_idx: blankIndex, model_kind: modelKind } = loadedMeta;
+        if (!Number.isSafeInteger(width) || width <= 0 || width > 2048 ||
+            !Number.isSafeInteger(height) || height <= 0 || height > 2048) {
+          throw new Error("Invalid model image dimensions");
+        }
+        if (typeof alphabet !== "string" || alphabet.length === 0 || new Set(alphabet).size !== alphabet.length) {
+          throw new Error("Invalid model alphabet");
+        }
+        if (!Number.isSafeInteger(blankIndex) || blankIndex < 0) {
+          throw new Error("Invalid model blank index");
+        }
+        if (modelKind !== "crnn_ctc") throw new Error("Unsupported model kind");
 
         const canvas = typeof OffscreenCanvas !== "undefined"
-          ? new OffscreenCanvas(W, H)
-          : Object.assign(document.createElement("canvas"), { width: W, height: H });
-        drawCtx = canvas.getContext("2d", { willReadFrequently: true });
+          ? new OffscreenCanvas(width, height)
+          : Object.assign(document.createElement("canvas"), { width, height });
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        if (!context) throw new Error("Canvas 2D context is unavailable");
 
-        session = await ort.InferenceSession.create(
+        const createdSession = await ort.InferenceSession.create(
           chrome.runtime.getURL("model/crnn.onnx"),
           { executionProviders: ["wasm"] }
         );
-      })().catch((err) => {
+
+        meta = loadedMeta;
+        tensorBuffer = new Float32Array(width * height);
+        drawCtx = context;
+        session = createdSession;
+      })().catch((error) => {
         loadingPromise = null;
-        throw err;
+        meta = null;
+        tensorBuffer = null;
+        drawCtx = null;
+        session = null;
+        throw error;
       });
     }
     await loadingPromise;
   }
 
   function imageToTensor(img) {
-    const W = meta.img_w;
-    const H = meta.img_h;
-    drawCtx.clearRect(0, 0, W, H);
-    drawCtx.drawImage(img, 0, 0, W, H);
-    const rgba = drawCtx.getImageData(0, 0, W, H).data;
-    for (let i = 3, j = 0; i < rgba.length; i += 4, j++) {
-      tensorBuffer[j] = rgba[i] * 0.00392156862745098; // 1 / 255
+    const width = meta.img_w;
+    const height = meta.img_h;
+    drawCtx.clearRect(0, 0, width, height);
+    drawCtx.drawImage(img, 0, 0, width, height);
+    const rgba = drawCtx.getImageData(0, 0, width, height).data;
+    if (!rgba || rgba.length !== width * height * 4) {
+      throw new Error("Unexpected canvas pixel buffer length");
     }
-    return new ort.Tensor("float32", tensorBuffer, [1, 1, H, W]);
+    // Preserve the existing alpha-channel preprocessing until the model's
+    // training-time preprocessing contract can be independently established.
+    for (let sourceIndex = 3, targetIndex = 0; sourceIndex < rgba.length; sourceIndex += 4, targetIndex++) {
+      tensorBuffer[targetIndex] = rgba[sourceIndex] / 255;
+    }
+    return new ort.Tensor("float32", tensorBuffer, [1, 1, height, width]);
   }
 
-  function ctcGreedyDecode(logits, T, C, alphabet, blankIdx) {
+  function ctcGreedyDecode(logits, timeSteps, classCount, alphabet, blankIndex) {
+    if (!Number.isSafeInteger(timeSteps) || timeSteps <= 0 ||
+        !Number.isSafeInteger(classCount) || classCount !== alphabet.length + 1 ||
+        !Number.isSafeInteger(blankIndex) || blankIndex < 0 || blankIndex >= classCount ||
+        !logits || logits.length !== timeSteps * classCount) {
+      throw new Error("Invalid CTC output contract");
+    }
+
     let result = "";
-    let prev = -1;
-    for (let t = 0; t < T; t++) {
-      const offset = t * C;
-      let bestIdx = 0;
-      let bestVal = logits[offset];
-      for (let c = 1; c < C; c++) {
-        const val = logits[offset + c];
-        if (val > bestVal) {
-          bestVal = val;
-          bestIdx = c;
+    let previousIndex = -1;
+    for (let time = 0; time < timeSteps; time++) {
+      const offset = time * classCount;
+      let bestIndex = 0;
+      let bestValue = Number(logits[offset]);
+      if (!Number.isFinite(bestValue)) throw new Error("Non-finite CTC logit");
+      for (let classIndex = 1; classIndex < classCount; classIndex++) {
+        const value = Number(logits[offset + classIndex]);
+        if (!Number.isFinite(value)) throw new Error("Non-finite CTC logit");
+        if (value > bestValue) {
+          bestValue = value;
+          bestIndex = classIndex;
         }
       }
-      if (bestIdx !== blankIdx && bestIdx !== prev) {
-        // Find the actual character mapping skipping the blank_idx.
-        // Assuming alphabet maps sequentially skipping blankIdx.
-        // E.g., if bestIdx = 0 and blankIdx = 0, we skip.
-        // if bestIdx = 1 and blankIdx = 0 -> alphabet[0]
-        let charIdx = bestIdx > blankIdx ? bestIdx - 1 : bestIdx;
-        if (charIdx >= 0 && charIdx < alphabet.length) {
-          result += alphabet[charIdx];
-        }
+      if (bestIndex !== blankIndex && bestIndex !== previousIndex) {
+        const characterIndex = bestIndex > blankIndex ? bestIndex - 1 : bestIndex;
+        result += alphabet[characterIndex];
       }
-      prev = bestIdx;
+      previousIndex = bestIndex;
     }
     return result;
   }
 
-  let lastFilledValue = "";
-  function fillInput(el, value) {
-    if (el.value !== "" && el.value !== lastFilledValue) {
-       // Value was manually entered by the user
-       return;
-    }
+  function fillInput(element, value) {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    if (setter) setter.call(el, value);
-    else el.value = value;
-    lastFilledValue = value;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
+    if (setter) setter.call(element, value);
+    else element.value = value;
+    writingInput = true;
+    try {
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    } finally {
+      writingInput = false;
+    }
   }
 
-  async function solveCaptcha() {
+  function operationIsCurrent(generation, image, input, source, inputValue) {
+    reconcileDom();
+    return generation === currentSolveGeneration &&
+      image === activeImage && input === activeInput &&
+      image.isConnected && input.isConnected &&
+      imageSource(image) === source &&
+      input.value === inputValue && !inputWasEdited;
+  }
+
+  async function drainSolves() {
     if (isSolving) return;
-    const img = findElementByPriority(IMG_SELECTORS, false);
-    const input = findElementByPriority(INPUT_SELECTORS, true);
-    if (!img || !input) return;
-
-    watchImage(img);
-
-    if (!img.complete || img.naturalWidth === 0) return; // watchImage handles 'load'
-
-    if (img.src && img.src === lastSolvedSrc && input.value.length >= 4) return;
-
     isSolving = true;
-    let generation = ++currentSolveGeneration;
+
     try {
-      await ensureModel();
-      if (generation !== currentSolveGeneration) return; // Stale
+      while (solveRequested) {
+        solveRequested = false;
+        const generation = currentSolveGeneration;
+        reconcileDom();
+        const image = activeImage;
+        const input = activeInput;
+        if (!image || !input || !image.isConnected || !input.isConnected ||
+            !image.complete || image.naturalWidth === 0) continue;
 
-      const currentSrc = img.src;
-      const tensor = imageToTensor(img);
-      const output = await session.run({ input: tensor });
-      if (!output || !output.logits || !output.logits.dims || output.logits.dims.length !== 3) {
-         throw new Error("Invalid ONNX output shape");
-      }
-      const [, T, C] = output.logits.dims;
-      if (C !== meta.alphabet.length + 1) {
-         throw new Error("Invalid ONNX output classes");
-      }
-      const code = ctcGreedyDecode(output.logits.data, T, C, meta.alphabet, meta.blank_idx);
+        const source = imageSource(image);
+        if (!source) continue;
+        const inputValueAtStart = input.value;
+        const inputMayBeWritten = !inputWasEdited &&
+          (inputValueAtStart === "" || inputValueAtStart === lastWrittenValue);
+        if (!inputMayBeWritten) continue;
+        if (source === lastSolvedSrc && inputValueAtStart === lastWrittenValue) continue;
 
-      // Ensure target element is still the same and generation matches
-      const currentImg = findElementByPriority(IMG_SELECTORS, false);
-      const currentInput = findElementByPriority(INPUT_SELECTORS, true);
+        try {
+          await ensureModel();
+          if (!operationIsCurrent(generation, image, input, source, inputValueAtStart)) continue;
 
-      if (generation === currentSolveGeneration && currentImg === img && currentInput === input) {
-        if (code.length >= 4) {
-          lastSolvedSrc = currentSrc;
-          fillInput(input, code);
+          const tensor = imageToTensor(image);
+          if (!operationIsCurrent(generation, image, input, source, inputValueAtStart)) continue;
+
+          const output = await session.run({ input: tensor });
+          if (!operationIsCurrent(generation, image, input, source, inputValueAtStart)) continue;
+          if (!output || !output.logits || !Array.isArray(output.logits.dims) || output.logits.dims.length !== 3) {
+            throw new Error("Invalid ONNX logits output");
+          }
+          const [batchSize, timeSteps, classCount] = output.logits.dims;
+          if (batchSize !== 1 || classCount !== meta.alphabet.length + 1 ||
+              !output.logits.data || output.logits.data.length !== timeSteps * classCount) {
+            throw new Error("Unexpected ONNX logits dimensions");
+          }
+          const code = ctcGreedyDecode(output.logits.data, timeSteps, classCount, meta.alphabet, meta.blank_idx);
+
+          if (code.length >= 4 && code.length <= timeSteps &&
+              operationIsCurrent(generation, image, input, source, inputValueAtStart) &&
+              !inputWasEdited && (input.value === "" || input.value === lastWrittenValue)) {
+            fillInput(input, code);
+            lastWrittenValue = code;
+            lastSolvedSrc = source;
+          }
+        } catch (error) {
+          console.error("[KLU-Captcha]", error);
         }
       }
-    } catch (err) {
-      console.error("[KLU-Captcha]", err);
     } finally {
       isSolving = false;
-      // If generation got bumped while solving, schedule another execution.
-      if (generation !== currentSolveGeneration) {
-        setTimeout(solveCaptcha, 0);
-      }
+      if (solveRequested) queueMicrotask(() => { void drainSolves(); });
     }
   }
 
-  const imgAttrObserver = new MutationObserver(() => {
-    lastSolvedSrc = "";
-    currentSolveGeneration++; // invalidate in-flight inference on src change
-    if (!isSolving) {
-      solveCaptcha();
-    }
-  });
-
-  const imgLoadListener = () => {
-    currentSolveGeneration++;
-    if (!isSolving) solveCaptcha();
-  };
-
-  function watchImage(img) {
-    if (observedImg === img) return;
-    if (observedImg) {
-      observedImg.removeEventListener("load", imgLoadListener);
-    }
-    observedImg = img;
-    imgAttrObserver.disconnect();
-    if (img) {
-      imgAttrObserver.observe(img, { attributes: true, attributeFilter: ["src"] });
-      img.addEventListener("load", imgLoadListener);
-    }
+  imageObserver = new MutationObserver(onImageSourceChange);
+  documentObserver = new MutationObserver(reconcileDom);
+  if (document.documentElement) {
+    documentObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["id", "name", "type", "placeholder", "disabled", "readonly", "hidden", "class", "style"]
+    });
   }
 
-  const documentObserver = new MutationObserver(() => {
-    const currentImg = findElementByPriority(IMG_SELECTORS, false);
-    const currentInput = findElementByPriority(INPUT_SELECTORS, true);
-    if (!currentImg || !currentInput) return;
-
-    if (observedImg !== currentImg) {
-       currentSolveGeneration++;
-       if (!isSolving) solveCaptcha();
-    } else {
-       // Just kick off solving if they exist and aren't running
-       if (!isSolving && currentImg.src !== lastSolvedSrc) {
-           solveCaptcha();
-       }
-    }
-  });
-
-  if (findElementByPriority(IMG_SELECTORS, false) && findElementByPriority(INPUT_SELECTORS, true)) {
-    solveCaptcha();
-  }
-  documentObserver.observe(document.documentElement, { childList: true, subtree: true });
+  reconcileDom();
+  window.__kluCaptchaSolverLoaded = true;
 })();

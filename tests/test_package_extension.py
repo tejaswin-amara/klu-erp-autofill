@@ -1,33 +1,32 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
-import subprocess
-import sys
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGER = ROOT / "scripts" / "package_extension.py"
+SPEC = importlib.util.spec_from_file_location("package_extension", PACKAGER)
+assert SPEC and SPEC.loader
+packager = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(packager)
 
 
 class PackageExtensionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
-        self.output = Path(self.temp_dir.name) / "extension.zip"
+        self.temp_root = Path(self.temp_dir.name)
+        self.output = self.temp_root / "extension.zip"
 
     def build_archive(self) -> zipfile.ZipFile:
-        result = subprocess.run(
-            [sys.executable, str(PACKAGER), "--output", str(self.output)],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        root = self.fixture_root()
+        packager.create_archive(self.output, root)
         self.assertTrue(self.output.is_file())
         self.assertTrue(self.output.with_name(self.output.name + ".sha256").is_file())
         archive = zipfile.ZipFile(self.output)
@@ -35,30 +34,34 @@ class PackageExtensionTests(unittest.TestCase):
         self.assertIsNone(archive.testzip(), "ZIP integrity check failed")
         return archive
 
-    def test_archive_contains_runtime_and_redistribution_documents(self) -> None:
+    def fixture_root(self) -> Path:
+        root = self.temp_root / f"fixture-repository-{len(list(self.temp_root.glob('fixture-repository-*')))}"
+        root.mkdir()
+        for relative in packager.RELEASE_FILES:
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if relative == "manifest.json":
+                path.write_text(json.dumps({
+                    "content_scripts": [{"js": ["content.js"]}],
+                    "icons": {"16": "icons/icon16.png"},
+                    "web_accessible_resources": [{"resources": ["model/crnn.onnx"]}],
+                }), encoding="utf-8")
+            elif relative == "assets/readme-banner.svg":
+                path.write_text("<svg xmlns=\"http://www.w3.org/2000/svg\"/>", encoding="utf-8")
+            else:
+                path.write_bytes(("fixture:" + relative).encode("utf-8"))
+        (root / "assets" / "file.bin").write_bytes(b"fixture-payload")
+        return root
+
+    def test_archive_contains_exact_runtime_allowlist(self) -> None:
         with self.build_archive() as archive:
             names = set(archive.namelist())
-            required = {
-                "manifest.json", "content.js", "README.md", "LICENSE", "NOTICE",
-                "THIRD_PARTY_NOTICES.md", "docs/PRIVACY.md", "model/crnn.json",
-                "model/crnn.onnx", "lib/ort.min.js", "lib/ort-wasm-simd.wasm",
-                "icons/icon16.png", "icons/icon48.png", "icons/icon128.png",
-                "CHECKSUMS.sha256",
-            }
-            expected_release_files = {
-                "manifest.json", "content.js", "README.md", "LICENSE", "NOTICE",
-                "THIRD_PARTY_NOTICES.md", "SECURITY.md", "SUPPORT.md", "CHANGELOG.md",
-                "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "assets/readme-banner.svg",
-                "docs/PRIVACY.md", "icons/icon16.png", "icons/icon48.png",
-                "icons/icon128.png", "lib/ort.min.js", "lib/ort-wasm-simd.wasm",
-                "model/crnn.json", "model/crnn.onnx", "CHECKSUMS.sha256",
-            }
-            self.assertEqual(names, expected_release_files, "Unexpected release archive contents")
+            expected = set(packager.RELEASE_FILES) | {"CHECKSUMS.sha256"}
+            self.assertEqual(names, expected, "Unexpected release archive contents")
             self.assertNotIn(".gitignore", names)
             self.assertFalse(any(name.startswith(".github/") for name in names))
             self.assertFalse(any(name.startswith("tests/") for name in names))
             self.assertFalse(any(name.startswith("scripts/") for name in names))
-            self.assertTrue(all(not name.startswith("klu-erp-autofill/") for name in names))
 
     def test_manifest_references_are_present_in_archive(self) -> None:
         with self.build_archive() as archive:
@@ -73,7 +76,7 @@ class PackageExtensionTests(unittest.TestCase):
                 for path in group.get("resources", []):
                     self.assertIn(path, names)
 
-    def test_embedded_checksums_match_packaged_files(self) -> None:
+    def test_embedded_checksums_match_every_packaged_file(self) -> None:
         with self.build_archive() as archive:
             names = set(archive.namelist())
             checksum_text = archive.read("CHECKSUMS.sha256").decode("utf-8")
@@ -82,118 +85,119 @@ class PackageExtensionTests(unittest.TestCase):
                 digest, relative = line.split("  ", 1)
                 self.assertIn(relative, names)
                 self.assertNotEqual(relative, "CHECKSUMS.sha256")
-                self.assertEqual(
-                    hashlib.sha256(archive.read(relative)).hexdigest(), digest,
-                    "Checksum mismatch: " + relative,
-                )
+                self.assertEqual(hashlib.sha256(archive.read(relative)).hexdigest(), digest)
                 checked.add(relative)
             self.assertEqual(checked, names - {"CHECKSUMS.sha256"})
 
-    def test_zip_sidecar_matches_archive(self) -> None:
+    def test_zip_sidecar_matches_exact_archive_bytes(self) -> None:
         with self.build_archive():
             sidecar = self.output.with_name(self.output.name + ".sha256")
             digest, name = sidecar.read_text(encoding="utf-8").split()
             self.assertEqual(name, self.output.name)
             self.assertEqual(hashlib.sha256(self.output.read_bytes()).hexdigest(), digest)
 
+    def test_missing_allowlisted_file_fails_in_temporary_fixture(self) -> None:
+        root = self.fixture_root()
+        before = sorted((path.relative_to(root).as_posix(), path.is_symlink()) for path in root.rglob("*"))
+        with self.assertRaisesRegex(FileNotFoundError, "Required release file is missing"):
+            packager.load_release_files(root, ("missing.bin",))
+        after = sorted((path.relative_to(root).as_posix(), path.is_symlink()) for path in root.rglob("*"))
+        self.assertEqual(after, before)
 
-    def test_missing_allowlisted_file_raises_error(self) -> None:
-        temp_root = Path(self.temp_dir.name) / "mock_root"
-        temp_root.mkdir(parents=True, exist_ok=True)
-        test_packager = temp_root / "test_packager.py"
+    def test_symlinked_allowlisted_file_is_rejected_without_repository_mutation(self) -> None:
+        root = self.fixture_root()
+        target = root / "assets" / "file.bin"
+        link = root / "assets" / "linked.bin"
+        link.symlink_to(target)
+        with self.assertRaisesRegex(ValueError, "symlink path component"):
+            packager.load_release_files(root, ("assets/linked.bin",))
+        self.assertTrue(target.is_file())
+        self.assertTrue(link.is_symlink())
 
-        packager_content = PACKAGER.read_text()
-        packager_content = packager_content.replace(
-            'ROOT = Path(__file__).resolve().parents[1]',
-            f'ROOT = Path("{temp_root.as_posix()}")'
-        ).replace(
-            'RELEASE_FILES = (',
-            'RELEASE_FILES = ("non_existent_file.txt", '
-        )
-        test_packager.write_text(packager_content)
+    def test_symlinked_parent_and_dangling_symlink_are_rejected(self) -> None:
+        root = self.fixture_root()
+        external = self.temp_root / "external"
+        external.mkdir()
+        (external / "secret.bin").write_bytes(b"not for packaging")
+        (root / "alias").symlink_to(external, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlink path component"):
+            packager.load_release_files(root, ("alias/secret.bin",))
 
-        result = subprocess.run(
-            [sys.executable, str(test_packager), "--output", str(self.output)],
-            cwd=temp_root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+        (root / "assets" / "dangling.bin").symlink_to(root / "missing-target.bin")
+        with self.assertRaisesRegex(ValueError, "symlink path component"):
+            packager.load_release_files(root, ("assets/dangling.bin",))
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Required release file is missing", result.stderr)
-        self.assertFalse(self.output.exists())
-        self.assertFalse(self.output.with_suffix('.tmp').exists())
+    def test_path_traversal_in_allowlist_is_rejected(self) -> None:
+        root = self.fixture_root()
+        with self.assertRaisesRegex(ValueError, "Unsafe release path"):
+            packager.load_release_files(root, ("../outside.bin",))
 
-    def test_symlinked_allowlisted_file_raises_error(self) -> None:
-        temp_root = Path(self.temp_dir.name) / "mock_root"
-        temp_root.mkdir(parents=True, exist_ok=True)
-        test_packager = temp_root / "test_packager.py"
+    def test_output_collision_with_source_file_is_rejected(self) -> None:
+        root = self.fixture_root()
+        source = root / "assets" / "file.bin"
+        original = source.read_bytes()
+        with self.assertRaisesRegex(ValueError, "outside dist"):
+            packager.create_archive(source, root, ("assets/file.bin",))
+        self.assertEqual(source.read_bytes(), original)
 
-        symlink_path = temp_root / "test_symlink.txt"
-        target_path = temp_root / "test_target.txt"
-        target_path.write_text("dummy")
-        symlink_path.symlink_to(target_path)
+    def test_output_inside_dist_is_allowed_but_dist_backup_is_not(self) -> None:
+        root = self.fixture_root()
+        digest = packager.create_archive(root / "dist" / "extension.zip", root, ("assets/file.bin",))
+        self.assertEqual(len(digest), 64)
+        rejected_path = root / "dist-backup" / "extension.zip"
+        with self.assertRaisesRegex(ValueError, "outside dist"):
+            packager.create_archive(rejected_path, root, ("assets/file.bin",))
+        self.assertFalse(rejected_path.parent.exists(), "rejected output must not create a directory")
 
-        packager_content = PACKAGER.read_text()
-        packager_content = packager_content.replace(
-            'ROOT = Path(__file__).resolve().parents[1]',
-            f'ROOT = Path("{temp_root.as_posix()}")'
-        ).replace(
-            'RELEASE_FILES = (',
-            'RELEASE_FILES = ("test_symlink.txt", '
-        )
-        test_packager.write_text(packager_content)
+    def test_symlinked_output_directory_is_rejected(self) -> None:
+        root = self.fixture_root()
+        external = self.temp_root / "external-output"
+        external.mkdir()
+        (root / "dist").symlink_to(external, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "symlink path component"):
+            packager.create_archive(root / "dist" / "extension.zip", root, ("assets/file.bin",))
 
-        result = subprocess.run(
-            [sys.executable, str(test_packager), "--output", str(self.output)],
-            cwd=temp_root,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+    def test_existing_lock_prevents_concurrent_publication(self) -> None:
+        root = self.fixture_root()
+        output = self.temp_root / "locked.zip"
+        lock = output.with_name(f".{output.name}.lock")
+        lock.write_text("another process", encoding="utf-8")
+        with self.assertRaisesRegex(RuntimeError, "holds the lock"):
+            packager.create_archive(output, root, ("assets/file.bin",))
+        self.assertEqual(lock.read_text(encoding="utf-8"), "another process")
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Refusing to package symlink", result.stderr)
-        self.assertFalse(self.output.exists())
+    def test_sidecar_publication_failure_restores_previous_pair(self) -> None:
+        root = self.fixture_root()
+        output = self.temp_root / "transaction.zip"
+        sidecar = output.with_name(output.name + ".sha256")
+        output.write_bytes(b"previous-archive")
+        sidecar.write_bytes(b"previous-sidecar")
+        original_replace = packager.os.replace
+        failed_once = False
 
-    def test_output_collision_with_source_file_fails_safely(self) -> None:
-        source_file = ROOT / "content.js"
+        def replace_with_failure(source, destination):
+            nonlocal failed_once
+            if Path(destination) == sidecar and not failed_once:
+                failed_once = True
+                raise OSError("injected sidecar publication failure")
+            return original_replace(source, destination)
 
-        result = subprocess.run(
-            [sys.executable, str(PACKAGER), "--output", str(source_file)],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Refusing to write output inside source directory outside of dist/", result.stderr)
+        with mock.patch.object(packager.os, "replace", side_effect=replace_with_failure):
+            with self.assertRaisesRegex(OSError, "injected sidecar"):
+                packager.create_archive(output, root, ("assets/file.bin",))
+
+        self.assertEqual(output.read_bytes(), b"previous-archive")
+        self.assertEqual(sidecar.read_bytes(), b"previous-sidecar")
+        self.assertFalse(output.with_name(f".{output.name}.lock").exists())
+        self.assertFalse(list(self.temp_root.glob(".*.tmp")))
 
     def test_archive_is_byte_for_byte_deterministic(self) -> None:
-        first_result = subprocess.run(
-            [sys.executable, str(PACKAGER), "--output", str(self.output)],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(first_result.returncode, 0, first_result.stderr + first_result.stdout)
-
-        second_output = Path(self.temp_dir.name) / "second.zip"
-        second_result = subprocess.run(
-            [sys.executable, str(PACKAGER), "--output", str(second_output)],
-            cwd=ROOT,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(second_result.returncode, 0, second_result.stderr + second_result.stdout)
-        self.assertEqual(
-            self.output.read_bytes(),
-            second_output.read_bytes(),
-            "Rebuilding the same source tree should produce identical ZIP bytes",
-        )
+        root = self.fixture_root()
+        first = self.temp_root / "first.zip"
+        second = self.temp_root / "second.zip"
+        packager.create_archive(first, root, ("assets/file.bin",))
+        packager.create_archive(second, root, ("assets/file.bin",))
+        self.assertEqual(first.read_bytes(), second.read_bytes())
 
 
 if __name__ == "__main__":

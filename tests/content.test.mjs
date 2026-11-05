@@ -2,222 +2,287 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const read = (relativePath) => fs.readFileSync(path.join(ROOT, relativePath), "utf8");
+const CONTENT_SCRIPT = fs.readFileSync(path.join(ROOT, "content.js"), "utf8");
 
-function createMockDOM() {
-  const listeners = {};
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+function createImage(source = "image-a.png") {
+  const listeners = new Map();
   return {
-    window: { __kluCaptchaSolverLoaded: false },
-    document: {
-      documentElement: { childList: true, subtree: true },
-      createElement: () => ({ width: 0, height: 0, getContext: () => ({ clearRect: () => {}, drawImage: () => {}, getImageData: () => ({ data: new Uint8ClampedArray(4) }) }) }),
-      querySelectorAll: () => [],
-      querySelector: () => null,
+    tagName: "IMG",
+    src: source,
+    currentSrc: source,
+    complete: true,
+    naturalWidth: 120,
+    isConnected: true,
+    listeners,
+    getBoundingClientRect: () => ({ width: 120, height: 50 }),
+    addEventListener(type, callback) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(callback);
     },
-    chrome: {
-      runtime: {
-        getURL: (p) => p
-      }
-    },
-    ort: {
-      env: { wasm: {} },
-      Tensor: class { constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; } },
-      InferenceSession: {
-        create: async () => ({ run: async () => ({ logits: { dims: [1, 1, 1], data: [0] } }) })
-      }
-    },
-    MutationObserver: class {
-      constructor(cb) { this.cb = cb; }
-      observe() {}
-      disconnect() {}
-    },
-    fetch: async () => ({ ok: true, json: async () => ({ img_w: 120, img_h: 50, blank_idx: 0, alphabet: "abc" }) }),
-    setTimeout: (cb, t) => { cb(); return 1; },
-    clearTimeout: () => {},
-    Event: class { constructor(type) { this.type = type; } },
-    HTMLInputElement: { prototype: { value: { set: function(v) { this.value = v; } } } }
+    removeEventListener(type, callback) { listeners.get(type)?.delete(callback); },
+    dispatch(type) { for (const callback of [...(listeners.get(type) || [])]) callback.call(this, { type, target: this }); }
   };
 }
 
-test("content.js sets up environment and selectors successfully without crashing", async () => {
-  const contentJs = read("content.js");
-  const env = createMockDOM();
-  const func = new Function("window", "document", "chrome", "ort", "MutationObserver", "fetch", "setTimeout", "clearTimeout", "Event", "HTMLInputElement", "OffscreenCanvas", contentJs);
-
-  assert.doesNotThrow(() => {
-    func(env.window, env.document, env.chrome, env.ort, env.MutationObserver, env.fetch, env.setTimeout, env.clearTimeout, env.Event, env.HTMLInputElement, undefined);
-  });
-  assert.equal(env.window.__kluCaptchaSolverLoaded, true);
-});
-
-test("findElementByPriority selects correct element according to priorities", async () => {
-  const contentJs = read("content.js");
-
-  // Expose findElementByPriority to global scope for testing
-  const exposedScript = contentJs.replace("function findElementByPriority", "globalThis.findElementByPriority = function");
-
-  const env = createMockDOM();
-  const els = [
-    { id: 'wrong', isConnected: true, getBoundingClientRect: () => ({width: 10, height: 10}) },
-    { id: 'correct', isConnected: true, getBoundingClientRect: () => ({width: 10, height: 10}) },
-    { id: 'hidden', isConnected: true, getBoundingClientRect: () => ({width: 0, height: 0}) }
-  ];
-
-  env.document.querySelectorAll = (selector) => {
-    if (selector === "img#loginform-verifycode-image") return [els[1]];
-    if (selector === 'img[src*="captcha"]') return [els[0]]; // Lower priority
-    return [];
+function createInput() {
+  const listeners = new Map();
+  const input = {
+    tagName: "INPUT",
+    type: "text",
+    disabled: false,
+    readOnly: false,
+    isConnected: true,
+    _value: "",
+    listeners,
+    get value() { return this._value; },
+    set value(value) { this._value = String(value); },
+    getBoundingClientRect: () => ({ width: 180, height: 24 }),
+    addEventListener(type, callback) {
+      if (!listeners.has(type)) listeners.set(type, new Set());
+      listeners.get(type).add(callback);
+    },
+    removeEventListener(type, callback) { listeners.get(type)?.delete(callback); },
+    dispatchEvent(event) {
+      for (const callback of [...(listeners.get(event.type) || [])]) callback.call(this, event);
+      return true;
+    },
+    dispatch(type) { this.dispatchEvent({ type, target: this, bubbles: true }); }
   };
+  return input;
+}
 
-  const func = new Function("window", "document", "chrome", "ort", "MutationObserver", "fetch", "setTimeout", "clearTimeout", "Event", "HTMLInputElement", "OffscreenCanvas", exposedScript);
-  func(env.window, env.document, env.chrome, env.ort, env.MutationObserver, env.fetch, env.setTimeout, env.clearTimeout, env.Event, env.HTMLInputElement, undefined);
-
-  const imgSelectors = [
-    'img#loginFormCaptcha-image',
-    'img#loginform-verifycode-image',
-    'img[src*="r=site/captcha"]',
-    'img[src*="captcha"]'
-  ];
-
-  const selected = globalThis.findElementByPriority(imgSelectors, false);
-  assert.equal(selected.id, 'correct', "Should pick higher priority selector even if multiple match in query");
-  delete globalThis.findElementByPriority;
-});
-
-test("ctcGreedyDecode handles blank index mapping appropriately", async () => {
-  const contentJs = read("content.js");
-  const exposedScript = contentJs.replace("function ctcGreedyDecode", "globalThis.ctcGreedyDecode = function");
-  const env = createMockDOM();
-  const func = new Function("window", "document", "chrome", "ort", "MutationObserver", "fetch", "setTimeout", "clearTimeout", "Event", "HTMLInputElement", "OffscreenCanvas", exposedScript);
-  func(env.window, env.document, env.chrome, env.ort, env.MutationObserver, env.fetch, env.setTimeout, env.clearTimeout, env.Event, env.HTMLInputElement, undefined);
-
-  // Alphabet size 3: "abc", Classes: 4 (0 is blank)
+function logitsFor(character, blankIndex = 0) {
   const alphabet = "abc";
-  const blankIdx = 0;
-  // sequence: 'a', blank, 'a', 'b', blank, 'c', 'c'
-  // best idx:  1,    0,    1,   2,    0,    3,   3 (collapses 'c')
-  // logits format [T*C]: we only set the max value for simplicity
-  const T = 7;
-  const C = 4;
-  const logits = new Array(T*C).fill(0);
+  const characterIndex = alphabet.indexOf(character);
+  assert.notEqual(characterIndex, -1);
+  const classIndex = characterIndex >= blankIndex ? characterIndex + 1 : characterIndex;
+  const classCount = alphabet.length + 1;
+  const values = new Float32Array(7 * classCount);
+  for (let time = 0; time < 7; time++) {
+    const selected = time % 2 === 0 ? classIndex : blankIndex;
+    values[time * classCount + selected] = 10;
+  }
+  return { logits: { dims: [1, 7, classCount], data: values } };
+}
 
-  const setMax = (t, c) => logits[t*C + c] = 1;
-  setMax(0, 1); // 'a'
-  setMax(1, 0); // blank
-  setMax(2, 1); // 'a'
-  setMax(3, 2); // 'b'
-  setMax(4, 0); // blank
-  setMax(5, 3); // 'c'
-  setMax(6, 3); // 'c' (should collapse)
+function createHarness({ blankIndex = 0, runImpl } = {}) {
+  const image = createImage();
+  const input = createInput();
+  const nodes = new Map();
+  const observers = [];
+  const runs = [];
+  let currentImage = image;
+  let currentInput = input;
 
-  const result = globalThis.ctcGreedyDecode(logits, T, C, alphabet, blankIdx);
-  assert.equal(result, "aabc");
+  const documentElement = { nodeName: "HTML" };
+  const document = {
+    documentElement,
+    querySelectorAll(selector) {
+      if (selector.startsWith("img#loginFormCaptcha-image")) return currentImage ? [currentImage] : [];
+      if (selector.startsWith("input#loginFormCaptcha")) return currentInput ? [currentInput] : [];
+      return nodes.get(selector) || [];
+    },
+    createElement(name) {
+      assert.equal(name, "canvas");
+      return {
+        width: 0,
+        height: 0,
+        getContext() {
+          return {
+            clearRect() {},
+            drawImage() {},
+            getImageData(_x, _y, width, height) {
+              const data = new Uint8ClampedArray(width * height * 4);
+              for (let index = 3; index < data.length; index += 4) data[index] = 255;
+              return { data };
+            }
+          };
+        }
+      };
+    }
+  };
 
-  delete globalThis.ctcGreedyDecode;
+  class MockMutationObserver {
+    constructor(callback) {
+      this.callback = callback;
+      this.target = null;
+      this.options = null;
+      this.connected = false;
+      observers.push(this);
+    }
+    observe(target, options) { this.target = target; this.options = options; this.connected = true; }
+    disconnect() { this.connected = false; }
+    trigger(records = []) { if (this.connected) this.callback(records, this); }
+  }
+
+  class MockInputEvent {
+    constructor(type, options = {}) { this.type = type; this.bubbles = Boolean(options.bubbles); }
+  }
+
+  const env = {
+    window: { __kluCaptchaSolverLoaded: false },
+    document,
+    chrome: { runtime: { getURL: (relative) => `chrome-extension://test/${relative}` } },
+    MutationObserver: MockMutationObserver,
+    Event: MockInputEvent,
+    HTMLInputElement: function HTMLInputElement() {},
+    OffscreenCanvas: undefined,
+    fetch: async () => ({ ok: true, json: async () => ({ alphabet: "abc", img_w: 120, img_h: 50, model_kind: "crnn_ctc", blank_idx: blankIndex }) }),
+    console: { error() {} },
+    queueMicrotask,
+    setTimeout,
+    clearTimeout
+  };
+  Object.defineProperty(env.HTMLInputElement.prototype, "value", {
+    set(value) { this._value = String(value); },
+    get() { return this._value; }
+  });
+
+  env.ort = {
+    env: { wasm: {} },
+    Tensor: class Tensor { constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; } },
+    InferenceSession: {
+      create: async () => ({
+        run(inputTensor) {
+          const operation = deferred();
+          const record = { inputTensor, operation };
+          runs.push(record);
+          const index = runs.length - 1;
+          if (runImpl) runImpl(record, index);
+          else operation.resolve(logitsFor("a", blankIndex));
+          return operation.promise;
+        }
+      })
+    }
+  };
+
+  vm.runInNewContext(CONTENT_SCRIPT, env, { filename: "content.js" });
+
+  return {
+    env, image, input, runs, observers, documentElement,
+    get currentImage() { return currentImage; },
+    get currentInput() { return currentInput; },
+    setImage(next) { if (currentImage) currentImage.isConnected = false; currentImage = next; },
+    setInput(next) { if (currentInput) currentInput.isConnected = false; currentInput = next; },
+    imageObserver(target = currentImage) { return observers.find((observer) => observer.target === target && observer.options?.attributes); },
+    documentObserver() { return observers.find((observer) => observer.target === documentElement && observer.options?.childList); },
+    async waitForRun(index) {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (runs[index]) return runs[index];
+        await new Promise((resolve) => queueMicrotask(resolve));
+      }
+      assert.fail(`Inference run ${index + 1} did not start`);
+    },
+    async waitForValue(expected, target = input) {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (target.value === expected) return;
+        await new Promise((resolve) => queueMicrotask(resolve));
+      }
+      assert.equal(target.value, expected);
+    }
+  };
+}
+
+test("content script initializes and scopes its model resources locally", () => {
+  const harness = createHarness();
+  assert.equal(harness.env.window.__kluCaptchaSolverLoaded, true);
+  assert.equal(harness.env.ort.env.wasm.wasmPaths, "chrome-extension://test/lib/");
+  assert.equal(harness.env.ort.env.wasm.numThreads, 1);
 });
 
+test("latest image is processed after an actual in-flight inference becomes obsolete", async () => {
+  const harness = createHarness({ runImpl: () => {} });
+  const firstRun = await harness.waitForRun(0);
 
+  harness.image.src = "image-b.png";
+  harness.image.currentSrc = "image-b.png";
+  harness.imageObserver(harness.image).trigger([{ type: "attributes", attributeName: "src" }]);
+  assert.equal(harness.runs.length, 1, "second inference must wait for the in-flight operation");
 
+  firstRun.operation.resolve(logitsFor("a"));
+  const secondRun = await harness.waitForRun(1);
+  assert.equal(harness.input.value, "", "obsolete image A output must not be applied");
 
+  secondRun.operation.resolve(logitsFor("b"));
+  await harness.waitForValue("bbbb");
+  assert.equal(harness.runs.length, 2, "latest image must be processed exactly once");
+});
 
+test("rapid image updates coalesce to the latest source", async () => {
+  const harness = createHarness({ runImpl: () => {} });
+  const firstRun = await harness.waitForRun(0);
 
+  harness.image.src = "image-b.png";
+  harness.image.currentSrc = "image-b.png";
+  harness.imageObserver().trigger([{ type: "attributes", attributeName: "src" }]);
+  harness.image.src = "image-c.png";
+  harness.image.currentSrc = "image-c.png";
+  harness.imageObserver().trigger([{ type: "attributes", attributeName: "src" }]);
 
-test("solveCaptcha prevents applying result if image changes during in-flight inference", async () => {
-  const contentJs = read("content.js");
+  firstRun.operation.resolve(logitsFor("a"));
+  const latestRun = await harness.waitForRun(1);
+  assert.equal(harness.runs.length, 2, "intermediate image B should be coalesced");
+  latestRun.operation.resolve(logitsFor("c"));
+  await harness.waitForValue("cccc");
+});
 
-  let exposedScript = contentJs.replace("async function solveCaptcha", "globalThis.solveCaptcha = async function");
+test("replaced CAPTCHA image is rebound and old load listener is removed", async () => {
+  const harness = createHarness({ runImpl: () => {} });
+  const firstRun = await harness.waitForRun(0);
+  assert.equal(harness.image.listeners.get("load")?.size, 1);
 
-  exposedScript = exposedScript.replace("const imgAttrObserver = new MutationObserver(() => {", "globalThis.triggerObserver = () => {\n lastSolvedSrc = \"\";\n currentSolveGeneration++;\n if (!isSolving) solveCaptcha();\n };\n const imgAttrObserver = new MutationObserver(() => {");
+  const replacement = createImage("replacement.png");
+  harness.setImage(replacement);
+  harness.documentObserver().trigger([{ type: "childList" }]);
 
-  let currentLogits = [];
-  const env = createMockDOM();
-  env.ort.InferenceSession.create = async () => ({
-    run: async () => {
-      await new Promise(r => setTimeout(r, 10));
-      return { logits: { dims: [1, 7, 4], data: currentLogits } };
-    }
-  });
+  assert.equal(harness.image.listeners.get("load")?.size || 0, 0);
+  assert.equal(replacement.listeners.get("load")?.size, 1);
+  firstRun.operation.resolve(logitsFor("a"));
+  const replacementRun = await harness.waitForRun(1);
+  replacementRun.operation.resolve(logitsFor("c"));
+  await harness.waitForValue("cccc");
+});
 
-  const imgA = { id: 'imgA', src: 'imgA.png', isConnected: true, getBoundingClientRect: () => ({width: 120, height: 50}), complete: true, naturalWidth: 120, addEventListener: ()=>{}, removeEventListener: ()=>{} };
-  const imgB = { id: 'imgB', src: 'imgB.png', isConnected: true, getBoundingClientRect: () => ({width: 120, height: 50}), complete: true, naturalWidth: 120, addEventListener: ()=>{}, removeEventListener: ()=>{} };
+test("replaced input is rebound and obsolete inference cannot write to it", async () => {
+  const harness = createHarness({ runImpl: () => {} });
+  const firstRun = await harness.waitForRun(0);
+  const replacement = createInput();
+  harness.setInput(replacement);
+  harness.documentObserver().trigger([{ type: "childList" }]);
 
-  let inputValue = "";
-  const inputEl = {
-      id: 'input',
-      isConnected: true,
-      type: 'text',
-      getBoundingClientRect: () => ({width: 120, height: 20}),
-      dispatchEvent: ()=>{},
-  };
+  firstRun.operation.resolve(logitsFor("a"));
+  const replacementRun = await harness.waitForRun(1);
+  assert.equal(harness.input.value, "");
+  replacementRun.operation.resolve(logitsFor("c"));
+  await harness.waitForValue("cccc", replacement);
+  assert.equal(harness.input.value, "");
+});
 
-  env.HTMLInputElement = {
-      prototype: {
-          value: {
-              set: function(v) {
-                  inputValue = v;
-              }
-          }
-      }
-  };
-  Object.defineProperty(inputEl, 'value', {
-      get: () => inputValue,
-      set: (v) => { inputValue = v; }
-  });
+test("manual input entered while inference is pending is never overwritten", async () => {
+  const harness = createHarness({ runImpl: () => {} });
+  const firstRun = await harness.waitForRun(0);
+  harness.input.value = "manual";
+  harness.input.dispatch("input");
+  firstRun.operation.resolve(logitsFor("a"));
+  await new Promise((resolve) => queueMicrotask(resolve));
+  assert.equal(harness.input.value, "manual");
+  assert.equal(harness.runs.length, 1);
+});
 
-  let currentImg = imgA;
-  env.document.querySelectorAll = (selector) => {
-    if (selector === "img#loginFormCaptcha-image") return [currentImg];
-    if (selector === "input#loginFormCaptcha") return [inputEl];
-    return [];
-  };
-
-  const func = new Function("window", "document", "chrome", "ort", "MutationObserver", "fetch", "setTimeout", "clearTimeout", "Event", "HTMLInputElement", "OffscreenCanvas", exposedScript);
-  func(env.window, env.document, env.chrome, env.ort, env.MutationObserver, env.fetch, env.setTimeout, env.clearTimeout, env.Event, env.HTMLInputElement, undefined);
-
-  let logitsA = [
-    0, 1, 0, 0, // 'a'
-    1, 0, 0, 0, // blank
-    0, 1, 0, 0, // 'a'
-    1, 0, 0, 0, // blank
-    0, 1, 0, 0, // 'a'
-    1, 0, 0, 0, // blank
-    0, 1, 0, 0  // 'a'
-  ]; // Length 7 (T=7)
-
-  let logitsB = [
-    0, 0, 1, 0, // 'b'
-    1, 0, 0, 0, // blank
-    0, 0, 1, 0, // 'b'
-    1, 0, 0, 0, // blank
-    0, 0, 1, 0, // 'b'
-    1, 0, 0, 0, // blank
-    0, 0, 1, 0  // 'b'
-  ];
-
-  currentLogits = logitsA;
-  const promiseA = globalThis.solveCaptcha();
-
-  currentImg = imgB;
-  currentLogits = logitsB;
-
-  globalThis.triggerObserver();
-
-  await promiseA;
-  assert.equal(inputValue, "");
-
-  // The finally block of the original solveCaptcha (A) will evaluate:
-  // if (generation !== currentSolveGeneration) { setTimeout(solveCaptcha, 0); }
-  // Since we use mock DOM setTimeout which calls cb immediately,
-  // B actually gets resolved automatically without us calling it!
-  // Wait a small tick for promise chains to resolve.
-  await new Promise(r => globalThis.setTimeout(r, 20));
-
-
-  assert.equal(inputValue, "bbbb");
-
-  delete globalThis.solveCaptcha;
-  delete globalThis.triggerObserver;
+test("CTC decoding respects a nonzero blank index", async () => {
+  const harness = createHarness({ blankIndex: 2, runImpl: () => {} });
+  const run = await harness.waitForRun(0);
+  run.operation.resolve(logitsFor("b", 2));
+  await harness.waitForValue("bbbb");
 });

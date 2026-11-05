@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "KLU ERP Captcha Auto-Fill",
   "version": "1.0.3",
-  "description": "Auto-fills the verification code on KL University ERP login. 100% on-device, no servers, no data collected.",
+  "description": "Uses a bundled model for local CAPTCHA recognition and autofill. Verify the result before submitting the ERP form.",
   "content_scripts": [
     {
       "matches": [
