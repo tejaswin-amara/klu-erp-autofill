@@ -20,6 +20,8 @@
   ];
 
   let session = null;
+  let sessionInputName = null;
+  let sessionOutputName = null;
   let meta = null;
   let loadingPromise = null;
   let tensorBuffer = null;
@@ -167,7 +169,14 @@
           chrome.runtime.getURL("model/crnn.onnx"),
           { executionProviders: ["wasm"] }
         );
+        if (!Array.isArray(createdSession.inputNames) || createdSession.inputNames.length !== 1 ||
+            !Array.isArray(createdSession.outputNames) || createdSession.outputNames.length !== 1) {
+          await createdSession.release?.();
+          throw new Error("The model must expose exactly one input and one output");
+        }
 
+        sessionInputName = createdSession.inputNames[0];
+        sessionOutputName = createdSession.outputNames[0];
         meta = loadedMeta;
         tensorBuffer = new Float32Array(width * height);
         drawCtx = context;
@@ -178,6 +187,8 @@
         tensorBuffer = null;
         drawCtx = null;
         session = null;
+        sessionInputName = null;
+        sessionOutputName = null;
         throw error;
       });
     }
@@ -284,17 +295,18 @@
           const tensor = imageToTensor(image);
           if (!operationIsCurrent(generation, image, input, source, inputValueAtStart)) continue;
 
-          const output = await session.run({ input: tensor });
+          const output = await session.run({ [sessionInputName]: tensor });
           if (!operationIsCurrent(generation, image, input, source, inputValueAtStart)) continue;
-          if (!output || !output.logits || !Array.isArray(output.logits.dims) || output.logits.dims.length !== 3) {
-            throw new Error("Invalid ONNX logits output");
+          const logits = output?.[sessionOutputName];
+          if (!logits || !Array.isArray(logits.dims) || logits.dims.length !== 3) {
+            throw new Error("Invalid ONNX output tensor");
           }
-          const [batchSize, timeSteps, classCount] = output.logits.dims;
+          const [batchSize, timeSteps, classCount] = logits.dims;
           if (batchSize !== 1 || classCount !== meta.alphabet.length + 1 ||
-              !output.logits.data || output.logits.data.length !== timeSteps * classCount) {
-            throw new Error("Unexpected ONNX logits dimensions");
+              !logits.data || logits.data.length !== timeSteps * classCount) {
+            throw new Error("Unexpected ONNX output dimensions");
           }
-          const code = ctcGreedyDecode(output.logits.data, timeSteps, classCount, meta.alphabet, meta.blank_idx);
+          const code = ctcGreedyDecode(logits.data, timeSteps, classCount, meta.alphabet, meta.blank_idx);
 
           if (code.length >= 4 && code.length <= timeSteps &&
               operationIsCurrent(generation, image, input, source, inputValueAtStart) &&

@@ -73,7 +73,7 @@ function logitsFor(character, blankIndex = 0) {
     const selected = time % 2 === 0 ? classIndex : blankIndex;
     values[time * classCount + selected] = 10;
   }
-  return { logits: { dims: [1, 7, classCount], data: values } };
+  return { sequence: { dims: [1, 7, classCount], data: values } };
 }
 
 function createHarness({ blankIndex = 0, runImpl } = {}) {
@@ -154,9 +154,11 @@ function createHarness({ blankIndex = 0, runImpl } = {}) {
     Tensor: class Tensor { constructor(type, data, dims) { this.type = type; this.data = data; this.dims = dims; } },
     InferenceSession: {
       create: async () => ({
-        run(inputTensor) {
+        inputNames: ["pixels"],
+        outputNames: ["sequence"],
+        run(feeds) {
           const operation = deferred();
-          const record = { inputTensor, operation };
+          const record = { feeds, inputTensor: feeds.pixels, operation };
           runs.push(record);
           const index = runs.length - 1;
           if (runImpl) runImpl(record, index);
@@ -209,6 +211,7 @@ test("latest image is processed after an actual in-flight inference becomes obso
   harness.image.currentSrc = "image-b.png";
   harness.imageObserver(harness.image).trigger([{ type: "attributes", attributeName: "src" }]);
   assert.equal(harness.runs.length, 1, "second inference must wait for the in-flight operation");
+  assert.deepEqual(Object.keys(firstRun.feeds), ["pixels"], "actual session input name must be used");
 
   firstRun.operation.resolve(logitsFor("a"));
   const secondRun = await harness.waitForRun(1);
