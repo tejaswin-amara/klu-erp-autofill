@@ -73,7 +73,7 @@
       ],
       "title": "Add offline behavior coverage for async lifecycle, selector priority and cleanup",
       "priority": "P1",
-      "status": "open",
+      "status": "complete",
       "targetFiles": [
         "content.js",
         "tests/repository.test.mjs"
@@ -98,7 +98,7 @@
       ],
       "title": "Add packaging negative-path and archive-integrity tests",
       "priority": "P2",
-      "status": "partial",
+      "status": "complete",
       "targetFiles": [
         "scripts/package_extension.py",
         "tests/test_package_extension.py",
@@ -121,7 +121,7 @@
       ],
       "title": "Add behavioral unit tests instead of relying solely on source-pattern assertions",
       "priority": "P1",
-      "status": "open",
+      "status": "complete",
       "targetFiles": [
         "content.js",
         "tests/repository.test.mjs"

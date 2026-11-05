@@ -6,8 +6,40 @@
   ort.env.wasm.wasmPaths = chrome.runtime.getURL("lib/");
   ort.env.wasm.numThreads = 1;
 
-  const IMG_SELECTOR = 'img#loginFormCaptcha-image, img#loginform-verifycode-image, img[src*="r=site/captcha"], img[src*="captcha"]';
-  const INPUT_SELECTOR = 'input#loginFormCaptcha, input[name="LoginForm[captcha]"], input#loginform-verifycode, input[name*="captcha" i], input[placeholder*="verification" i]';
+  const IMG_SELECTORS = [
+    'img#loginFormCaptcha-image',
+    'img#loginform-verifycode-image',
+    'img[src*="r=site/captcha"]',
+    'img[src*="captcha"]'
+  ];
+
+  const INPUT_SELECTORS = [
+    'input#loginFormCaptcha',
+    'input[name="LoginForm[captcha]"]',
+    'input#loginform-verifycode',
+    'input[name*="captcha" i]',
+    'input[placeholder*="verification" i]'
+  ];
+
+  function findElementByPriority(selectors, isInput = false) {
+    for (const selector of selectors) {
+      const elements = document.querySelectorAll(selector);
+      for (const el of elements) {
+        if (!el.isConnected) continue;
+        if (isInput) {
+          if (el.type === 'hidden' || el.disabled || el.readOnly) continue;
+        } else {
+          // Extra checks for img if needed
+        }
+        // Basic visibility check
+        const rect = el.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          return el;
+        }
+      }
+    }
+    return null;
+  }
 
   let session = null;
   let meta = null;
@@ -15,6 +47,7 @@
   let tensorBuffer = null;
   let drawCtx = null;
   let isSolving = false;
+  let currentSolveGeneration = 0;
   let lastSolvedSrc = "";
   let observedImg = null;
 
@@ -23,7 +56,11 @@
     if (!loadingPromise) {
       loadingPromise = (async () => {
         const metaRes = await fetch(chrome.runtime.getURL("model/crnn.json"));
+        if (!metaRes.ok) throw new Error("Metadata fetch failed: " + metaRes.status);
         meta = await metaRes.json();
+        if (typeof meta.blank_idx !== "number" || typeof meta.alphabet !== "string") {
+            throw new Error("Invalid model metadata");
+        }
         const W = meta.img_w;
         const H = meta.img_h;
         tensorBuffer = new Float32Array(W * H);
@@ -57,7 +94,7 @@
     return new ort.Tensor("float32", tensorBuffer, [1, 1, H, W]);
   }
 
-  function ctcGreedyDecode(logits, T, C, alphabet) {
+  function ctcGreedyDecode(logits, T, C, alphabet, blankIdx) {
     let result = "";
     let prev = -1;
     for (let t = 0; t < T; t++) {
@@ -71,8 +108,15 @@
           bestIdx = c;
         }
       }
-      if (bestIdx !== 0 && bestIdx !== prev) {
-        result += alphabet[bestIdx - 1];
+      if (bestIdx !== blankIdx && bestIdx !== prev) {
+        // Find the actual character mapping skipping the blank_idx.
+        // Assuming alphabet maps sequentially skipping blankIdx.
+        // E.g., if bestIdx = 0 and blankIdx = 0, we skip.
+        // if bestIdx = 1 and blankIdx = 0 -> alphabet[0]
+        let charIdx = bestIdx > blankIdx ? bestIdx - 1 : bestIdx;
+        if (charIdx >= 0 && charIdx < alphabet.length) {
+          result += alphabet[charIdx];
+        }
       }
       prev = bestIdx;
     }
@@ -89,30 +133,37 @@
 
   async function solveCaptcha() {
     if (isSolving) return;
-    const img = document.querySelector(IMG_SELECTOR);
-    const input = document.querySelector(INPUT_SELECTOR);
+    const img = findElementByPriority(IMG_SELECTORS, false);
+    const input = findElementByPriority(INPUT_SELECTORS, true);
     if (!img || !input) return;
 
     watchImage(img);
 
-    if (!img.complete || img.naturalWidth === 0) {
-      img.addEventListener("load", solveCaptcha, { once: true });
-      return;
-    }
+    if (!img.complete || img.naturalWidth === 0) return; // watchImage handles 'load'
 
     if (img.src && img.src === lastSolvedSrc && input.value.length >= 4) return;
 
     isSolving = true;
+    const generation = ++currentSolveGeneration;
     try {
       await ensureModel();
+      if (generation !== currentSolveGeneration) return; // Stale
+
       const currentSrc = img.src;
       const tensor = imageToTensor(img);
       const output = await session.run({ input: tensor });
       const [, T, C] = output.logits.dims;
-      const code = ctcGreedyDecode(output.logits.data, T, C, meta.alphabet);
-      if (code.length >= 4) {
-        lastSolvedSrc = currentSrc;
-        fillInput(input, code);
+      const code = ctcGreedyDecode(output.logits.data, T, C, meta.alphabet, meta.blank_idx);
+
+      // Ensure target element is still the same and generation matches
+      const currentImg = findElementByPriority(IMG_SELECTORS, false);
+      const currentInput = findElementByPriority(INPUT_SELECTORS, true);
+
+      if (generation === currentSolveGeneration && currentImg === img && currentInput === input) {
+        if (code.length >= 4) {
+          lastSolvedSrc = currentSrc;
+          fillInput(input, code);
+        }
       }
     } catch (err) {
       console.error("[KLU-Captcha]", err);
@@ -123,27 +174,33 @@
 
   const imgAttrObserver = new MutationObserver(() => {
     lastSolvedSrc = "";
+    currentSolveGeneration++; // invalidate in-flight inference on src change
     solveCaptcha();
   });
 
   function watchImage(img) {
     if (observedImg === img) return;
+    if (observedImg) {
+      observedImg.removeEventListener("load", solveCaptcha);
+    }
     observedImg = img;
     imgAttrObserver.disconnect();
     imgAttrObserver.observe(img, { attributes: true, attributeFilter: ["src"] });
     img.addEventListener("load", solveCaptcha);
   }
 
-  if (document.querySelector(IMG_SELECTOR) && document.querySelector(INPUT_SELECTOR)) {
+  if (findElementByPriority(IMG_SELECTORS, false) && findElementByPriority(INPUT_SELECTORS, true)) {
     solveCaptcha();
   } else {
+    let timeoutId;
     const bodyObserver = new MutationObserver(() => {
-      if (document.querySelector(IMG_SELECTOR) && document.querySelector(INPUT_SELECTOR)) {
+      if (findElementByPriority(IMG_SELECTORS, false) && findElementByPriority(INPUT_SELECTORS, true)) {
         bodyObserver.disconnect();
+        clearTimeout(timeoutId);
         solveCaptcha();
       }
     });
     bodyObserver.observe(document.documentElement, { childList: true, subtree: true });
-    setTimeout(() => bodyObserver.disconnect(), 15000);
+    timeoutId = setTimeout(() => bodyObserver.disconnect(), 15000);
   }
 })();

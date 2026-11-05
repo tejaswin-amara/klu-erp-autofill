@@ -42,6 +42,14 @@ def load_release_files() -> dict[str, bytes]:
     files: dict[str, bytes] = {}
     for relative in RELEASE_FILES:
         path = ROOT / relative
+        # Prevent path traversal
+        try:
+            resolved = path.resolve(strict=True)
+            if not str(resolved).startswith(str(ROOT)):
+                raise ValueError(f"Path traversal detected: {relative}")
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Required release file is missing: {relative}")
+
         if path.is_symlink():
             raise ValueError(f"Refusing to package symlink: {relative}")
         if not path.is_file():
@@ -51,6 +59,12 @@ def load_release_files() -> dict[str, bytes]:
 
 
 def create_archive(output: Path) -> str:
+    # Ensure output doesn't overwrite source files
+    if str(output.resolve()).startswith(str(ROOT.resolve())):
+        # Allow placing it in ROOT/dist but not anywhere else in source
+        if not str(output.resolve()).startswith(str((ROOT / "dist").resolve())):
+            raise ValueError("Refusing to write output inside source directory outside of dist/")
+
     files = load_release_files()
     checksums = "".join(
         f"{sha256(files[name])}  {name}\n" for name in sorted(files)
@@ -58,23 +72,39 @@ def create_archive(output: Path) -> str:
     entries = {**files, CHECKSUM_FILE: checksums}
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(output, "w") as archive:
-        for name in sorted(entries):
-            info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.create_system = 3
-            info.external_attr = 0o100644 << 16
-            archive.writestr(
-                info,
-                entries[name],
-                compress_type=zipfile.ZIP_DEFLATED,
-                compresslevel=9,
-            )
+    temp_output = output.with_name(output.name + ".tmp")
+    try:
+        with zipfile.ZipFile(temp_output, "w") as archive:
+            for name in sorted(entries):
+                info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.create_system = 3
+                info.external_attr = 0o100644 << 16
+                archive.writestr(
+                    info,
+                    entries[name],
+                    compress_type=zipfile.ZIP_DEFLATED,
+                    compresslevel=9,
+                )
+
+        temp_output.replace(output)
+    except Exception:
+        if temp_output.exists():
+            temp_output.unlink()
+        raise
 
     digest = sha256(output.read_bytes())
-    output.with_name(output.name + ".sha256").write_text(
-        f"{digest}  {output.name}\n", encoding="utf-8"
-    )
+
+    sidecar = output.with_name(output.name + ".sha256")
+    temp_sidecar = sidecar.with_name(sidecar.name + ".tmp")
+    try:
+        temp_sidecar.write_text(f"{digest}  {output.name}\n", encoding="utf-8")
+        temp_sidecar.replace(sidecar)
+    except Exception:
+        if temp_sidecar.exists():
+            temp_sidecar.unlink()
+        raise
+
     return digest
 
 

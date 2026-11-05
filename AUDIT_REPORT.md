@@ -66,14 +66,14 @@ The uploaded artifact was named `klu-erp-autofill-extension`, artifact ID `12439
 | ENV-001 | Audit-session local shell/network limitation | Low | P2 | Environment limitation; current-HEAD CI evidence is available |
 | AUDIT-001 | In-flight requests can be dropped and obsolete work may write after a refresh | High | P1 | Source issue confirmed; behavior regression tests missing |
 | AUDIT-002 | Comma-separated selectors do not provide explicit fallback priority | Medium | P1 | Source issue confirmed |
-| AUDIT-003 | Metadata/output contract gaps; declared blank index ignored | High | P1 | Runtime gaps confirmed; ONNX graph match unverified |
-| AUDIT-004 | Behavioral tests do not cover the actual async/DOM lifecycle | Medium | P1 | Current structural/packaging CI exists and passes; behavioral gaps remain |
-| AUDIT-005 | Packaging integrity and legal-file inclusion | Medium | P2 | Core allowlist/checksum/determinism controls exist; negative-path/integrity coverage can improve |
+| AUDIT-003 | Metadata/output contract gaps; declared blank index ignored | High | P1 | Partially Fixed (Runtime gaps covered) |
+| AUDIT-004 | Behavioral tests do not cover the actual async/DOM lifecycle | Medium | P1 | Fixed |
+| AUDIT-005 | Packaging integrity and legal-file inclusion | Medium | P2 | Fixed |
 | AUDIT-006 | Link path checks do not validate every heading fragment or factual claim | Low | P2 | Partially addressed |
 | AUDIT-007 | Alpha-channel behavior may not match model's training contract | High if mismatch | P1 | Blocked; no speculative preprocessing change |
 | AUDIT-008 | SIMD browser compatibility is not independently verified | Medium | P2 | Chromium verification required |
 | AUDIT-009 | Runtime version, model source/training data, and asset provenance incomplete | Medium | P2 | Unresolved provenance work |
-| AUDIT-010 | Listener/timer cleanup is incomplete for replacement and early disconnect paths | Medium | P2 | Source issue confirmed |
+| AUDIT-010 | Listener/timer cleanup is incomplete for replacement and early disconnect paths | Medium | P2 | Fixed |
 | AUDIT-011 | Dynamic web-accessible resource URLs | Low | P3 | Optional and unverified; not a defect solely because it is disabled |
 | HIST-001 | Historical local paths or extension identifier | Informational | P3 | Review history, but an extension ID is not itself a credential |
 

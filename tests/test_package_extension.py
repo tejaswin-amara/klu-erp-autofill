@@ -97,6 +97,84 @@ class PackageExtensionTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(self.output.read_bytes()).hexdigest(), digest)
 
 
+    def test_missing_allowlisted_file_raises_error(self) -> None:
+        test_packager = ROOT / "scripts" / "test_packager.py"
+        packager_content = PACKAGER.read_text()
+        packager_content = packager_content.replace(
+            'RELEASE_FILES = (',
+            'RELEASE_FILES = ("non_existent_file.txt", '
+        )
+        test_packager.write_text(packager_content)
+
+        try:
+            result = subprocess.run(
+                [sys.executable, str(test_packager), "--output", str(self.output)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Required release file is missing", result.stderr)
+            self.assertFalse(self.output.exists())
+            self.assertFalse(self.output.with_suffix('.tmp').exists())
+        finally:
+            if test_packager.exists():
+                test_packager.unlink()
+
+    def test_symlinked_allowlisted_file_raises_error(self) -> None:
+        import os
+
+        symlink_path = ROOT / "test_symlink.txt"
+        target_path = ROOT / "test_target.txt"
+        target_path.write_text("dummy")
+        try:
+            symlink_path.symlink_to(target_path)
+
+            # Create a modified packager script for testing to avoid mocking across subprocess boundaries
+            test_packager = ROOT / "scripts" / "test_packager.py"
+            packager_content = PACKAGER.read_text()
+            packager_content = packager_content.replace(
+                'RELEASE_FILES = (',
+                'RELEASE_FILES = ("test_symlink.txt", '
+            )
+            test_packager.write_text(packager_content)
+
+            result = subprocess.run(
+                [sys.executable, str(test_packager), "--output", str(self.output)],
+                cwd=ROOT,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Refusing to package symlink", result.stderr)
+            self.assertFalse(self.output.exists())
+
+        finally:
+            if symlink_path.exists():
+                symlink_path.unlink()
+            if target_path.exists():
+                target_path.unlink()
+            test_packager = ROOT / "scripts" / "test_packager.py"
+            if test_packager.exists():
+                test_packager.unlink()
+
+    def test_output_collision_with_source_file_fails_safely(self) -> None:
+        source_file = ROOT / "content.js"
+
+        result = subprocess.run(
+            [sys.executable, str(PACKAGER), "--output", str(source_file)],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Refusing to write output inside source directory outside of dist/", result.stderr)
+
     def test_archive_is_byte_for_byte_deterministic(self) -> None:
         first_result = subprocess.run(
             [sys.executable, str(PACKAGER), "--output", str(self.output)],
