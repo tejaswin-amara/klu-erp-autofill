@@ -156,12 +156,12 @@ def create_archive(
     published_archive = False
     try:
         with os.fdopen(lock_fd, "w", encoding="utf-8") as lock_stream:
-            lock_stream.write(f"pid={os.getpid()}\\n")
+            lock_stream.write(f"pid={os.getpid()}\n")
             lock_stream.flush()
 
         files = load_release_files(root, release_files)
         checksums = "".join(
-            f"{sha256(files[name])}  {name}\\n" for name in sorted(files)
+            f"{sha256(files[name])}  {name}\n" for name in sorted(files)
         ).encode("utf-8")
         entries = {**files, CHECKSUM_FILE: checksums}
 
@@ -177,7 +177,7 @@ def create_archive(
 
         _verify_archive(staged_archive, entries)
         digest = sha256(staged_archive.read_bytes())
-        sidecar_bytes = f"{digest}  {output.name}\\n".encode("utf-8")
+        sidecar_bytes = f"{digest}  {output.name}\n".encode("utf-8")
         sidecar_fd, staged_sidecar = _new_temp_file(output.parent, f".{sidecar.name}.")
         with os.fdopen(sidecar_fd, "wb") as stream:
             stream.write(sidecar_bytes)
