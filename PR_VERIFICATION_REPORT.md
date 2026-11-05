@@ -1,59 +1,84 @@
-# Independent Verification and Hardening Report (PR #5)
+# PR #5 — Independent Verification and Remediation Report
 
-## A. Executive Summary
-Conducted an independent technical and behavioral review of the remediation efforts implemented in PR #5 (commit `7118d73`). verified implementations against earlier claims in `FINAL_REPORT.md`. All major corrections addressing stale inference, DOM lifecycle management, packaging integrity, and testing robustness have been confirmed working. Some unresolved gaps regarding alpha-channel processing and full Chromium automation still exist, which remain properly disclosed.
+## A. Current pull request state
 
-## B. PR State
-- **PR Number:** 5
-- **Working Branch:** `fix/comprehensive-audit-and-repo-improvements`
-- **Initial Commit:** `83b8594`
-- **Head Commit:** `202ae95`
-- **CI Status:** Tests pass locally (`npm test` & `npm run test:package`).
-- **Working-Tree Status:** Clean.
+- **PR:** https://github.com/tejaswin-amara/klu-erp-autofill/pull/5
+- **State at implementation verification:** Open, not merged
+- **Base branch:** `main`
+- **Base SHA:** `83b85947c4d8bba0fc0771403b326fa24049b2be`
+- **Head branch:** `fix-comprehensive-audit-and-repo-improvements-16780642424654106567`
+- **Implementation commit verified by CI:** `aaee21773ab83eb701d744cfb2873f1417ceadfd`
+- **CI push run:** [#47](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003762852) — success
+- **CI pull-request run:** [#48](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003777393) — success
 
-## C. Verification of Previous Claims
-| Claim | Evidence Inspected | Result | Remaining Concern |
-|---|---|---|---|
-| Generation counter prevents stale inference | Code (`content.js` lifecycle logic) & `content.test.mjs` setup | Confirmed | - |
-| Selector priority via `findElementByPriority` | Code (`content.js`) & `content.test.mjs` test cases | Confirmed | - |
-| CTC decoding uses `meta.blank_idx` | Code (`content.js` `ctcGreedyDecode` function) | Confirmed | - |
-| HTTP response check added for metadata | Code (`content.js` `fetch` logic checking `!metaRes.ok`) | Confirmed | - |
-| Atomic temp files in packaging handle failures | Code (`package_extension.py` `try/except`) | Confirmed | - |
-| Output paths protected from source collisions | Code (`package_extension.py`) | Confirmed | - |
-| Observer/listener cleanup improved | Code (`content.js` `MutationObserver` logic and timer clearance) | Confirmed | - |
-| Node & Python Tests passing (14 & 8) | Terminal output (`npm test` and `npm run test:package`) | Confirmed | - |
+The report is tied to the implementation commit above. If later documentation-only or test-validator commits are added, their commit and CI results must be recorded separately; do not silently reuse these SHAs.
 
-## D. Additional Findings
-| ID | Area | Finding | Priority | Action Taken |
-|---|---|---|---|---|
-| VF-001 | Async | No additional test specifically enforcing source image change race conditions inside Node test suite. | P2 | Added deterministic regression test proving `currentSolveGeneration++` securely intercepts and aborts race conditions. (Completed) |
+## B. Verified implementation changes
 
-## E. Alpha Preprocessing Investigation (TASK-002)
-- **Available evidence:** `content.js` assumes `rgba[i] * 0.00392156862745098` utilizing index 3 (Alpha) channel.
-- **Contract Established?** No. Source training metrics or ONNX input shape definitions defining alpha as the single channel were not obtainable.
-- **Decision:** As instructed by Outcome B, behavior is preserved, preventing speculative failure. Uncertainty is heavily documented in issues and reports.
+| Area | Change | Evidence |
+|---|---|---|
+| Async lifecycle | Latest-state-wins, single-flight solve drain; invalidates stale results and processes pending latest image | `content.js`, deferred-promise tests |
+| Source changes | Source/generation revalidation before applying output | `content.js`, race tests |
+| DOM replacement | Persistent document observer reconciles active image/input nodes | `content.js`, replacement tests |
+| Listener cleanup | Exact load callback is retained and removed from replaced images | `content.js`, listener test |
+| Manual input | Independently entered values are not overwritten | `content.js`, manual-edit test |
+| Selector priority | Ordered selector evaluation | `content.js`, selector tests |
+| ONNX names | Input and output names are obtained from the inference session | `content.js`, synthetic session names `pixels` and `sequence` |
+| CTC validation | Validates tensor rank/length, class count, blank index, and finite logits | `content.js`, decoder tests |
+| Packaging | Component-aware path checks, symlink rejection, unique staging, lock, staged integrity validation, rollback | `scripts/package_extension.py` |
+| Packaging tests | Temporary fixtures; no source-tree fixture files | `tests/test_package_extension.py` |
 
-## F. Chromium/Browser Verification (TASK-007)
-- **Status:** Headless node-tests simulating standard DOM API behaviors passed reliably.
-- **Blockers:** A full local automated E2E browser stack involving Puppeteer/Selenium and isolated environment variables targeting chromium isn't practically available within the existing offline audited shell.
-- **Remaining compatibility risks:** Edge-cases linking directly to live ONNX WASM memory leaks or rendering nuances inside native Chrome versions strictly relying on headless test stubs.
+## C. Test results at implementation commit
 
-## G. Test Results
-| Test Suite | Command | Passed | Failed | Status |
-|---|---|---:|---:|---|
-| Javascript Structural/Behavioral Tests | `npm test` | 15 | 0 | PASS |
-| Python Packaging Integrity Tests | `npm run test:package` | 8 | 0 | PASS |
+| Suite | Result |
+|---|---:|
+| Node tests | 18 passed, 0 failed |
+| Python packaging tests | 14 passed, 0 failed |
+| ZIP generation | Passed |
+| Artifact upload | Passed |
 
-## H. Security and Privacy
-- Manifest restricts `https://newerp.kluniversity.in/*` appropriately.
-- Zero off-site outbound endpoints present in JavaScript layer confirmed via reading content scripts.
-- No remote analytics or external APIs contacted.
-- Model attribution (ONNX/CRNN) remains partially unresolved on raw redistributable license proofs but noted strictly within `THIRD_PARTY_NOTICES.md`.
+The inner ZIP SHA-256 was:
 
-## I. Packaging
-- **Artifact:** Generates `klu-erp-autofill.zip` properly avoiding tracked source locations (dist/).
-- **Archive Integrity:** ZIP generation incorporates error boundaries ensuring complete structural cleanup on invalid/symlinked items.
-- **Reproducibility:** Byte-for-byte SHA hashing consistency remains true across repeated runs.
+`159c07a4b36326b6ff842a74c6fbfd274fd091945deda03629f0e6f986614b61`.
 
-## J. Final Merge-Readiness Assessment
-**Ready to merge with documented limitations** - No blocking defects remain. Core logic issues (async stale inference, missing API validations) are resolved alongside package handling structures. Limited testing capabilities simulating fully fledged Chromium automation and unknown Alpha-channel origins continue existing as documented constraints inside tracker metadata.
+These results are from GitHub Actions on the PR implementation commit. They are not claims of full local repository verification.
+
+## D. Browser verification
+
+- Chromium executable present: Chromium 144.
+- Attempted unpacked extension load with a temporary localhost-only manifest.
+- Browser policy returned: `Loading of unpacked extensions is disabled by the administrator.`
+- A plain headless Chromium invocation timed out.
+- No live ERP URL, production account, or production CAPTCHA was used.
+
+**Conclusion:** mocked DOM behavior is tested; actual extension loading and WASM execution in Chromium remain unverified due to environment restrictions.
+
+## E. Model and preprocessing limitations
+
+The existing alpha-channel preprocessing is preserved. The original model training pipeline and preprocessing specification were not available, so changing to RGB/grayscale would be speculative.
+
+ONNX session input/output names are now read dynamically from the created session. Actual model graph compatibility, preprocessing correctness, and recognition accuracy remain unverified.
+
+## F. Licensing and provenance
+
+The ONNX Runtime license notice is present, but the exact bundled runtime version still needs verification. CRNN model source, training-data provenance, redistribution rights, and complete icon attribution remain unresolved. The repository's Apache-2.0 license must not be treated as granting rights to every bundled asset.
+
+## G. Outstanding items
+
+| Task | Status | Impact |
+|---|---|---|
+| TASK-002 — authoritative ONNX/model/preprocessing contract | Blocked | Model correctness and recognition accuracy unverified |
+| TASK-007 — real Chromium extension/WASM smoke test | Blocked by environment policy | Browser compatibility unverified |
+| TASK-008 — exact runtime/model/icon provenance and redistribution rights | Blocked / unresolved | Public release rights not fully established |
+| TASK-010 — full Git-history secret review | Open | Historical exposure review incomplete |
+| TASK-012 — dynamic WAR URL | Optional | No change justified without browser evidence |
+
+The source-code merge decision and public release decision are separate. Unresolved model redistribution rights must be resolved before claiming a legally cleared public binary release.
+
+## H. Final assessment
+
+**Source remediation:** The implementation changes are covered by passing CI tests at `aaee217`.
+
+**Browser/model/legal release readiness:** Not fully established. Real Chromium verification, authoritative model preprocessing, model accuracy, and complete redistribution provenance remain outstanding.
+
+The PR must receive normal review and approval before merging. This report does not authorize or perform a merge.

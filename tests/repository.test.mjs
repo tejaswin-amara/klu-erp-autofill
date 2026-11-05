@@ -170,3 +170,82 @@ test("audit companion documents and machine-readable backlog are valid", () => {
     assert.ok(Array.isArray(task.dependencies));
   }
 });
+
+
+function markdownHeadingIds(source) {
+  const ids = new Set();
+  const counts = new Map();
+
+  for (const match of source.matchAll(/<a\s+id=["']([^"']+)["'][^>]*>/gi)) {
+    ids.add(match[1]);
+  }
+
+  for (const line of source.split(/\r?\n/)) {
+    const heading = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (!heading) continue;
+
+    const plain = heading[1]
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/<[^>]*>/g, "")
+      .replace(/<escape>|<\/escape>/g, "")
+      .replace(/[^\p{L}\p{N}\s-]/gu, "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-");
+
+    if (!plain) continue;
+    const occurrence = counts.get(plain) ?? 0;
+    counts.set(plain, occurrence + 1);
+    ids.add(occurrence === 0 ? plain : `${plain}-${occurrence}`);
+  }
+
+  return ids;
+}
+
+test("local Markdown fragments in maintained documents resolve to headings or explicit anchors", () => {
+  const markdownFiles = [
+    "README.md",
+    "AUDIT_REPORT.md",
+    "IMPROVEMENT_BACKLOG.md",
+    "FIX_IMPLEMENTATION_GUIDE.md",
+    "TEST_AND_VERIFICATION_PLAN.md",
+    "FINAL_REPORT.md",
+    "PR_VERIFICATION_REPORT.md",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/PRIVACY.md"
+  ].filter(exists);
+
+  const linkPattern = /\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g;
+
+  for (const documentPath of markdownFiles) {
+    const source = read(documentPath);
+    for (const match of source.matchAll(linkPattern)) {
+      const target = match[1].replace(/^<|>$/g, "");
+      if (!target.includes("#") || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(target)) continue;
+
+      const [pathname, rawFragment] = target.split("#", 2);
+      const fragment = decodeURIComponent(rawFragment || "");
+      if (!fragment) continue;
+
+      const localPath = decodeURIComponent((pathname || "").split("?", 1)[0]);
+      const resolved = localPath
+        ? path.resolve(ROOT, path.dirname(documentPath), localPath)
+        : path.resolve(ROOT, documentPath);
+      if (!resolved.toLowerCase().endsWith(".md") || !fs.existsSync(resolved)) continue;
+
+      const targetSource = fs.readFileSync(resolved, "utf8");
+      const ids = markdownHeadingIds(targetSource);
+      assert.ok(
+        ids.has(fragment),
+        `Broken local Markdown fragment in ${documentPath}: ${target}`
+      );
+    }
+  }
+});

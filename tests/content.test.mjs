@@ -76,10 +76,10 @@ function logitsFor(character, blankIndex = 0) {
   return { sequence: { dims: [1, 7, classCount], data: values } };
 }
 
-function createHarness({ blankIndex = 0, runImpl } = {}) {
-  const image = createImage();
+function createHarness({ blankIndex = 0, runImpl, initialImage = createImage(), selectorNodes = new Map() } = {}) {
+  const image = initialImage;
   const input = createInput();
-  const nodes = new Map();
+  const nodes = selectorNodes;
   const observers = [];
   const runs = [];
   let currentImage = image;
@@ -172,7 +172,7 @@ function createHarness({ blankIndex = 0, runImpl } = {}) {
   vm.runInNewContext(CONTENT_SCRIPT, env, { filename: "content.js" });
 
   return {
-    env, image, input, runs, observers, documentElement,
+    env, image, input, runs, observers, nodes, documentElement,
     get currentImage() { return currentImage; },
     get currentInput() { return currentInput; },
     setImage(next) { if (currentImage) currentImage.isConnected = false; currentImage = next; },
@@ -201,6 +201,21 @@ test("content script initializes and scopes its model resources locally", () => 
   assert.equal(harness.env.window.__kluCaptchaSolverLoaded, true);
   assert.equal(harness.env.ort.env.wasm.wasmPaths, "chrome-extension://test/lib/");
   assert.equal(harness.env.ort.env.wasm.numThreads, 1);
+});
+
+
+test("selector fallback priority is independent of document order", async () => {
+  const preferred = createImage("specific.png");
+  const lowerPriority = createImage("generic.png");
+  const selectorNodes = new Map([
+    ["img#loginform-verifycode-image", [preferred]],
+    ['img[src*="captcha"]', [lowerPriority]]
+  ]);
+  const harness = createHarness({ initialImage: null, selectorNodes, runImpl: () => {} });
+
+  assert.equal(preferred.listeners.get("load")?.size, 1);
+  assert.equal(lowerPriority.listeners.get("load")?.size || 0, 0);
+  await harness.waitForRun(0);
 });
 
 test("latest image is processed after an actual in-flight inference becomes obsolete", async () => {

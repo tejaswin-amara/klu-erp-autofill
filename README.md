@@ -36,7 +36,7 @@
     </td>
     <td width="50%">
       <strong>🔄 Refresh-aware</strong><br>
-      Watches for CAPTCHA image source changes and attempts recognition again.
+      Tracks CAPTCHA image and input changes, including image replacement, and schedules recognition for the latest image.
     </td>
   </tr>
   <tr>
@@ -96,7 +96,7 @@ graph TD
 4. **Infer:** Run the CRNN model through ONNX Runtime Web using WebAssembly.
 5. **Decode:** Convert model output into a character sequence using greedy CTC-style decoding.
 6. **Fill:** Update the verification field and dispatch `input` and `change` events.
-7. **Observe:** Watch for changes to the CAPTCHA image's `src` attribute and retry recognition when appropriate.
+7. **Observe:** Observe relevant DOM changes and CAPTCHA image `src`/`srcset` updates; stale inference is discarded and the latest image is scheduled.
 
 ## Technology stack
 
@@ -248,7 +248,7 @@ Recognition accuracy is not guaranteed. It depends on the CAPTCHA image, the mod
 
 ## Testing and release packaging
 
-The repository includes dependency-free structural checks and a standard-library ZIP packager. These checks validate the extension manifest, packaged file references, metadata shape, documentation presence, and manual-submission safeguards. They do **not** measure recognition accuracy or validate the model's training-time preprocessing contract.
+The repository includes dependency-free structural checks and a standard-library ZIP packager. These checks validate the extension manifest, packaged file references, metadata shape, documentation links/fragments, synthetic DOM lifecycle behavior, package integrity, and manual-submission safeguards. They do **not** establish recognition accuracy, validate the model's training-time preprocessing contract, or prove native Chromium compatibility.
 
 Requirements: Node.js 20 or newer and Python 3.10 or newer.
 

@@ -1,3 +1,5 @@
+> **Status update — 2026-11-05:** The first two sections below document the historical baseline and its CI run. PR #5 subsequently added production-script VM lifecycle tests and isolated packaging tests. Current implementation evidence is in [PR_VERIFICATION_REPORT.md](PR_VERIFICATION_REPORT.md). Latest verified implementation commit at the time of this update: `aaee21773ab83eb701d744cfb2873f1417ceadfd`; GitHub Actions runs #47 and #48 passed with 18 Node tests and 14 Python tests. A separate Markdown-fragment regression test is being added in the next verification pass.
+
 # Test and Verification Plan — KLU ERP AutoFill
 
 **Audited baseline:** `682d1b7f53294a81e57b721eafe5d6259ef787e5`  
