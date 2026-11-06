@@ -1,39 +1,54 @@
 {
   "repository": "https://github.com/tejaswin-amara/klu-erp-autofill",
   "targetBranch": "main",
-  "observedHeadSha": "682d1b7f53294a81e57b721eafe5d6259ef787e5",
-  "observedCi": {
-    "runId": 39808685305,
-    "url": "https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/39808685305",
-    "conclusion": "success",
-    "nodeTestsPassed": 10,
-    "nodeTestsFailed": 0,
-    "pythonPackagingTestsPassed": 5,
-    "releaseZipBuilt": true,
-    "artifactUploaded": true,
-    "releaseZipSha256": "6650149c8ea336f5c4838c95130e27a182f8e286e90d559f2eb328be88fd6f11"
-  },
+  "implementationHeadSha": "aaee21773ab83eb701d744cfb2873f1417ceadfd",
+  "observedCi": [
+    {
+      "runId": 42003762852,
+      "url": "https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003762852",
+      "event": "push",
+      "conclusion": "success",
+      "nodeTestsPassed": 18,
+      "nodeTestsFailed": 0,
+      "pythonPackagingTestsPassed": 14,
+      "releaseZipBuilt": true,
+      "artifactUploaded": true,
+      "releaseZipSha256": "159c07a4b36326b6ff842a74c6fbfd274fd091945deda03629f0e6f986614b61"
+    },
+    {
+      "runId": 42003777393,
+      "url": "https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003777393",
+      "event": "pull_request",
+      "conclusion": "success",
+      "nodeTestsPassed": 18,
+      "nodeTestsFailed": 0,
+      "pythonPackagingTestsPassed": 14,
+      "releaseZipBuilt": true,
+      "artifactUploaded": true,
+      "releaseZipSha256": "159c07a4b36326b6ff842a74c6fbfd274fd091945deda03629f0e6f986614b61"
+    }
+  ],
   "tasks": [
     {
       "taskId": "TASK-001",
       "findingIds": [
         "ENV-001"
       ],
-      "title": "Verify baseline and existing checks",
+      "title": "Verify historical baseline and current CI evidence",
       "priority": "P1",
       "status": "complete",
       "targetFiles": [
         "package.json",
-        "tests/repository.test.mjs",
-        "tests/test_package_extension.py"
+        "tests",
+        "audit/improvement-backlog.json"
       ],
       "dependencies": [],
       "effort": "XS",
-      "verification": "GitHub Actions run 39808685305; direct local execution unavailable in audit session",
+      "verification": "Historical baseline retained; PR implementation CI runs #47 and #48 passed.",
       "acceptanceCriteria": [
-        "Current main SHA recorded",
-        "Node and Python tests passed on the audited commit",
-        "Remote CI is not misreported as local execution"
+        "Historical SHA and test counts are labeled historical",
+        "Current implementation SHA and CI evidence are recorded",
+        "Remote CI is not misrepresented as local execution"
       ]
     },
     {
@@ -42,26 +57,26 @@
         "AUDIT-003",
         "AUDIT-007"
       ],
-      "title": "Verify ONNX graph, metadata, decoder mapping, and preprocessing contract",
+      "title": "Verify ONNX graph, decoder mapping, and model preprocessing provenance",
       "priority": "P1",
       "status": "blocked",
       "targetFiles": [
         "model/crnn.json",
         "model/crnn.onnx",
         "content.js",
-        "tests/repository.test.mjs"
+        "tests/content.test.mjs"
       ],
       "dependencies": [
-        "Binary graph access",
-        "Reliable model/preprocessing provenance"
+        "Authoritative model graph access",
+        "Original model/training preprocessing evidence"
       ],
       "effort": "M",
-      "verification": "Offline ONNX inspection and synthetic tests",
+      "verification": "Session input/output names are used dynamically; original graph/training preprocessing contract not established.",
       "acceptanceCriteria": [
-        "Input/output names and tensor shapes recorded",
-        "Blank/class mapping verified",
-        "Preprocessing changes supported by evidence",
-        "Unknown facts remain explicitly unknown"
+        "Actual graph names/ranks/dimensions validated",
+        "Blank/class mapping confirmed against graph",
+        "Preprocessing changes supported by training evidence",
+        "Unknown facts remain explicitly unresolved"
       ]
     },
     {
@@ -71,24 +86,24 @@
         "AUDIT-002",
         "AUDIT-010"
       ],
-      "title": "Add offline behavior coverage for async lifecycle, selector priority and cleanup",
+      "title": "Fix async lifecycle, selector priority, DOM replacement, and listener cleanup",
       "priority": "P1",
-      "status": "open",
+      "status": "complete",
       "targetFiles": [
         "content.js",
-        "tests/repository.test.mjs"
+        "tests/content.test.mjs"
       ],
       "dependencies": [
-        "Injectable test boundaries",
-        "Synthetic DOM and controlled promises"
+        "Synthetic DOM and deferred inference"
       ],
       "effort": "M",
-      "verification": "npm test",
+      "verification": "Production script VM behavior tests; latest-state scheduling, source invalidation, element replacement and cleanup cases; CI runs #47/#48.",
       "acceptanceCriteria": [
-        "Reverse-order async completions cannot affect obsolete fixture targets",
-        "Selector priority is explicit",
-        "Old listeners and timers are cleaned up",
-        "Failed initialization can retry"
+        "No latest update is lost",
+        "Obsolete inference never applies",
+        "Selector priority is deterministic",
+        "Replaced listeners are removed",
+        "Manual user input is preserved"
       ]
     },
     {
@@ -96,22 +111,22 @@
       "findingIds": [
         "AUDIT-005"
       ],
-      "title": "Add packaging negative-path and archive-integrity tests",
+      "title": "Harden packaging and isolate negative-path tests",
       "priority": "P2",
-      "status": "partial",
+      "status": "complete",
       "targetFiles": [
         "scripts/package_extension.py",
-        "tests/test_package_extension.py",
-        ".github/workflows/ci.yml"
+        "tests/test_package_extension.py"
       ],
       "dependencies": [],
       "effort": "S",
-      "verification": "npm run test:package",
+      "verification": "14 Python tests; CI runs #47/#48; archive testzip, embedded checksums, sidecar SHA, symlink/path and rollback cases.",
       "acceptanceCriteria": [
-        "Missing required file fails clearly",
-        "Symlinked listed input is rejected",
-        "Archive integrity is checked",
-        "Existing checksum and determinism checks remain green"
+        "Path-aware containment",
+        "Symlinks and traversal rejected",
+        "Temporary files unique and isolated",
+        "Archive/checksum failure rollback tested",
+        "Deterministic packaging retained"
       ]
     },
     {
@@ -119,22 +134,23 @@
       "findingIds": [
         "AUDIT-004"
       ],
-      "title": "Add behavioral unit tests instead of relying solely on source-pattern assertions",
+      "title": "Add production-logic behavior tests",
       "priority": "P1",
-      "status": "open",
+      "status": "complete",
       "targetFiles": [
         "content.js",
-        "tests/repository.test.mjs"
+        "tests/content.test.mjs"
       ],
       "dependencies": [
-        "TASK-003"
+        "Synthetic browser API harness"
       ],
       "effort": "M",
-      "verification": "npm test",
+      "verification": "Content script executed in isolated VM with mocked DOM, MutationObserver, session names, deferred inference and user-input assertions.",
       "acceptanceCriteria": [
-        "Critical branches exercised through testable production helpers",
-        "No live portal requests or production challenge fixtures",
-        "Test claims limited to behaviors actually exercised"
+        "Tests exercise production code",
+        "No production ERP endpoints",
+        "Deferred inference completes deterministically",
+        "Test assertions observe DOM state"
       ]
     },
     {
@@ -142,25 +158,25 @@
       "findingIds": [
         "AUDIT-006"
       ],
-      "title": "Extend Markdown link validation to audit docs and local fragments",
+      "title": "Validate maintained Markdown links and local fragments",
       "priority": "P2",
-      "status": "open",
+      "status": "complete",
       "targetFiles": [
         "tests/repository.test.mjs",
         "AUDIT_REPORT.md",
-        "IMPROVEMENT_BACKLOG.md",
-        "FIX_IMPLEMENTATION_GUIDE.md",
-        "TEST_AND_VERIFICATION_PLAN.md"
+        "FINAL_REPORT.md",
+        "PR_VERIFICATION_REPORT.md",
+        "IMPROVEMENT_BACKLOG.md"
       ],
       "dependencies": [
-        "Audit docs committed"
+        "Maintained documentation list"
       ],
       "effort": "S",
-      "verification": "npm test",
+      "verification": "Local fragment validation added; status remains complete only if final PR CI passes.",
       "acceptanceCriteria": [
-        "New docs included in link checks",
-        "Relative paths and supported local fragments resolve",
-        "Claim review remains distinct from link validation"
+        "Audit and final reports included",
+        "Relative paths resolve",
+        "Supported heading fragments resolve"
       ]
     },
     {
@@ -169,7 +185,7 @@
         "AUDIT-008",
         "AUDIT-011"
       ],
-      "title": "Verify bundled WASM loading and browser compatibility",
+      "title": "Verify Chromium extension and WASM compatibility",
       "priority": "P2",
       "status": "blocked",
       "targetFiles": [
@@ -180,15 +196,15 @@
         "README.md"
       ],
       "dependencies": [
-        "Controlled Chromium environment",
-        "Local synthetic fixture"
+        "Administrator permission to load unpacked extensions",
+        "Working headless browser environment"
       ],
       "effort": "S",
-      "verification": "Chromium smoke test",
+      "verification": "Chromium 144 executable found; unpacked extensions blocked by administrator policy; headless invocation timed out.",
       "acceptanceCriteria": [
         "Browser version recorded",
-        "Resource resolution and initialization verified",
-        "Only evidence-backed compatibility requirements documented"
+        "Extension load and resource resolution tested",
+        "Only observed compatibility claims documented"
       ]
     },
     {
@@ -196,7 +212,7 @@
       "findingIds": [
         "AUDIT-009"
       ],
-      "title": "Resolve runtime, model, and icon/font provenance",
+      "title": "Verify runtime, model, and asset provenance and redistribution rights",
       "priority": "P2",
       "status": "blocked",
       "targetFiles": [
@@ -208,27 +224,26 @@
         "icons"
       ],
       "dependencies": [
-        "Official runtime artifact",
-        "Model source/training records",
+        "Official runtime release metadata",
+        "Original model source/license",
         "Asset source records"
       ],
       "effort": "M",
-      "verification": "Upstream comparison and provenance review",
+      "verification": "Known unresolved: exact ORT build version, CRNN provenance/redistribution rights, and full icon attribution.",
       "acceptanceCriteria": [
         "Runtime version supported by evidence",
-        "Required third-party notices present",
-        "Model and asset provenance verified or transparently unresolved"
+        "Required notices complete",
+        "Model and asset rights evidenced or explicitly unresolved"
       ]
     },
     {
       "taskId": "TASK-009",
       "findingIds": [
-        "AUDIT-005",
-        "AUDIT-009"
+        "AUDIT-005"
       ],
-      "title": "Maintain least-privilege CI and strengthen package verification",
+      "title": "Maintain CI packaging and artifact traceability",
       "priority": "P2",
-      "status": "partial",
+      "status": "complete",
       "targetFiles": [
         ".github/workflows/ci.yml",
         "scripts/package_extension.py",
@@ -236,12 +251,12 @@
       ],
       "dependencies": [],
       "effort": "S",
-      "verification": "GitHub Actions and package tests",
+      "verification": "CI run #48 passed Node/Python checks, built release ZIP, uploaded artifact; SHA recorded.",
       "acceptanceCriteria": [
-        "CI fails on errors",
-        "Artifact tied to intended commit",
-        "Archive integrity and hashes verified",
-        "Development-only files excluded"
+        "CI fails on test errors",
+        "Archive contents validated",
+        "Checksums match exact bytes",
+        "Artifact is associated with tested commit"
       ]
     },
     {
@@ -256,13 +271,13 @@
         "Git history"
       ],
       "dependencies": [
-        "History access"
+        "Full history access"
       ],
       "effort": "S",
-      "verification": "Secret scanning/manual history review",
+      "verification": "Not completed in this remediation.",
       "acceptanceCriteria": [
-        "Credentials distinguished from public IDs/paths",
-        "No unnecessary credential rotation or destructive history rewrite",
+        "Actual credentials distinguished from public IDs and paths",
+        "No unnecessary history rewriting",
         "Real active-secret exposure escalated"
       ]
     },
@@ -271,20 +286,20 @@
       "findingIds": [
         "ENV-001"
       ],
-      "title": "Repeat direct local verification when checkout network is available",
+      "title": "Record direct local verification limitations",
       "priority": "P2",
       "status": "environment-limited",
       "targetFiles": [
         "Entire repository"
       ],
       "dependencies": [
-        "Network-enabled terminal"
+        "Full local checkout and network"
       ],
       "effort": "S",
-      "verification": "git rev-parse HEAD; git status --short; npm run check",
+      "verification": "Targeted scratch tests were run; full-suite source of truth is GitHub Actions.",
       "acceptanceCriteria": [
-        "Direct execution recorded separately from CI",
-        "Offline ONNX and browser checks run if tools become available"
+        "Local execution distinguished from remote CI",
+        "Full current-head tests evidenced by workflow"
       ]
     },
     {
@@ -292,7 +307,7 @@
       "findingIds": [
         "AUDIT-011"
       ],
-      "title": "Evaluate dynamic web-accessible URLs only if a concrete benefit is demonstrated",
+      "title": "Evaluate dynamic web-accessible resource URLs only if justified",
       "priority": "P3",
       "status": "optional",
       "targetFiles": [
@@ -300,14 +315,14 @@
         "content.js"
       ],
       "dependencies": [
-        "TASK-007"
+        "Controlled browser evidence"
       ],
       "effort": "S",
-      "verification": "Controlled Chromium regression test",
+      "verification": "No change justified; restrictive defaults preserved.",
       "acceptanceCriteria": [
-        "A risk is evidenced",
-        "Runtime resource URLs continue resolving",
-        "No speculative configuration added"
+        "Concrete risk demonstrated",
+        "Resource resolution verified",
+        "No speculative manifest expansion"
       ]
     }
   ]

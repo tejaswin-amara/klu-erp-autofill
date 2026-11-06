@@ -66,14 +66,14 @@ The uploaded artifact was named `klu-erp-autofill-extension`, artifact ID `12439
 | ENV-001 | Audit-session local shell/network limitation | Low | P2 | Environment limitation; current-HEAD CI evidence is available |
 | AUDIT-001 | In-flight requests can be dropped and obsolete work may write after a refresh | High | P1 | Source issue confirmed; behavior regression tests missing |
 | AUDIT-002 | Comma-separated selectors do not provide explicit fallback priority | Medium | P1 | Source issue confirmed |
-| AUDIT-003 | Metadata/output contract gaps; declared blank index ignored | High | P1 | Runtime gaps confirmed; ONNX graph match unverified |
-| AUDIT-004 | Behavioral tests do not cover the actual async/DOM lifecycle | Medium | P1 | Current structural/packaging CI exists and passes; behavioral gaps remain |
-| AUDIT-005 | Packaging integrity and legal-file inclusion | Medium | P2 | Core allowlist/checksum/determinism controls exist; negative-path/integrity coverage can improve |
+| AUDIT-003 | Metadata/output contract gaps; declared blank index ignored | High | P1 | Partially Fixed (Runtime gaps covered) |
+| AUDIT-004 | Behavioral tests do not cover the actual async/DOM lifecycle | Medium | P1 | Fixed |
+| AUDIT-005 | Packaging integrity and legal-file inclusion | Medium | P2 | Fixed |
 | AUDIT-006 | Link path checks do not validate every heading fragment or factual claim | Low | P2 | Partially addressed |
 | AUDIT-007 | Alpha-channel behavior may not match model's training contract | High if mismatch | P1 | Blocked; no speculative preprocessing change |
 | AUDIT-008 | SIMD browser compatibility is not independently verified | Medium | P2 | Chromium verification required |
 | AUDIT-009 | Runtime version, model source/training data, and asset provenance incomplete | Medium | P2 | Unresolved provenance work |
-| AUDIT-010 | Listener/timer cleanup is incomplete for replacement and early disconnect paths | Medium | P2 | Source issue confirmed |
+| AUDIT-010 | Listener/timer cleanup is incomplete for replacement and early disconnect paths | Medium | P2 | Fixed |
 | AUDIT-011 | Dynamic web-accessible resource URLs | Low | P3 | Optional and unverified; not a defect solely because it is disabled |
 | HIST-001 | Historical local paths or extension identifier | Informational | P3 | Review history, but an extension ID is not itself a credential |
 
@@ -178,3 +178,48 @@ Review history for actual credentials or sensitive data. An extension ID or loca
 No live ERP accounts, production CAPTCHA images, or production network endpoints were used. The ONNX graph and bundled runtime binaries were not inspected with a local parser in this session; no Chromium test was run locally. Current tests and CI do not establish recognition accuracy or model correctness.
 
 See [IMPROVEMENT_BACKLOG.md](IMPROVEMENT_BACKLOG.md), [FIX_IMPLEMENTATION_GUIDE.md](FIX_IMPLEMENTATION_GUIDE.md), [TEST_AND_VERIFICATION_PLAN.md](TEST_AND_VERIFICATION_PLAN.md), and [audit/improvement-backlog.json](audit/improvement-backlog.json).
+
+
+---
+
+## PR #5 remediation addendum — 2026-11-05
+
+This section records the implementation and verification added after the historical audit baseline above. The original audit remains tied to main commit `682d1b7f53294a81e57b721eafe5d6259ef787e5`; it must not be interpreted as a description of the final PR branch.
+
+**PR:** [#5](https://github.com/tejaswin-amara/klu-erp-autofill/pull/5)  
+**Implementation commit verified by CI:** `aaee21773ab83eb701d744cfb2873f1417ceadfd`  
+**Base:** `main` at `83b85947c4d8bba0fc0771403b326fa24049b2be`  
+**CI:** [Run #48 — successful](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003777393)
+
+### Implemented
+
+- Replaced the drop-on-busy solve path with a single-flight, latest-state-wins drain loop. Image changes during model initialization or inference invalidate stale work and leave a pending request for the latest state.
+- Added a persistent document observer to reconcile dynamically replaced CAPTCHA image and input elements.
+- Stored and removed the exact image-load listener callback when rebinding.
+- Tracked extension-owned input values and manual edits so inference does not overwrite a user's independently entered value.
+- Revalidated generation, element identity, connection state, image source, and input value before applying a result.
+- Validated core metadata fields, CTC dimensions, class count, blank index, output length, and finite logits.
+- Resolved ONNX input/output names from the created inference session rather than assuming literal names such as `input` and `logits`.
+- Replaced string-prefix package path checks with component-aware path checks, rejected symlink path components, created unique staging files, verified staged archives, and added rollback for normal publication failures.
+- Reworked packaging tests to use temporary fixture roots rather than writing/deleting fixture files in the real repository.
+- Corrected the manifest description to avoid unsupported absolute privacy claims.
+
+### Verification evidence
+
+At implementation commit `aaee217`, GitHub Actions runs #47 and #48 both passed:
+- Node: 18 passed, 0 failed.
+- Python packaging: 14 passed, 0 failed.
+- Release ZIP created and uploaded.
+- Inner ZIP SHA-256: `159c07a4b36326b6ff842a74c6fbfd274fd091945deda03629f0e6f986614b61`.
+
+The later final documentation/test commit will have its own CI run recorded in `PR_VERIFICATION_REPORT.md`.
+
+### Remaining limitations
+
+- The model's alpha-channel preprocessing contract remains unverified. Existing behavior is intentionally preserved; no speculative conversion to RGB or luminance has been made.
+- The ONNX graph and bundled runtime binaries have not been independently validated against original model provenance/training records. The extension now consumes ONNX session input/output names dynamically, but graph compatibility and model accuracy remain unproven.
+- Chromium 144 is installed in the available environment, but administrator policy disables loading unpacked extensions and a plain headless invocation timed out. This is an environment restriction, not a successful browser test.
+- The exact bundled ONNX Runtime version, CRNN source/training provenance and redistribution rights, and complete icon attribution remain unresolved. Public redistribution should not be treated as legally cleared until evidence is obtained.
+- Historical Git-secret review has not been completed.
+
+The automated checks above establish the behaviors explicitly tested; they do not establish recognition accuracy, live ERP compatibility, or legal redistribution rights.

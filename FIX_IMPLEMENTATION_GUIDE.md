@@ -1,3 +1,5 @@
+> **Status update — 2026-11-05:** This guide was written against historical baseline `682d1b7f53294a81e57b721eafe5d6259ef787e5`. The principal lifecycle, selector, listener, decoder validation, and packager implementation tasks have since been implemented in PR #5. See [PR_VERIFICATION_REPORT.md](PR_VERIFICATION_REPORT.md) and [IMPROVEMENT_BACKLOG.md](IMPROVEMENT_BACKLOG.md) for current status. Do not apply the old proposed fixes blindly to the current implementation.
+
 # Fix Implementation Guide — KLU ERP AutoFill
 
 **Baseline:** `682d1b7f53294a81e57b721eafe5d6259ef787e5`  
