@@ -1,8 +1,8 @@
 {
   "name": "klu-erp-autofill",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
-  "description": "Validation and reproducible packaging checks for the KLU ERP Auto-Fill extension",
+  "description": "On-device CAPTCHA autofill for KLU ERP and KL Sync, with structural and reproducible packaging checks.",
   "engines": {
     "node": ">=20"
   },
