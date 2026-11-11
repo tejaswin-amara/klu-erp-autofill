@@ -32,15 +32,14 @@ test("all manifest-referenced scripts, icons, and web-accessible resources exist
   assert.ok(exists("model/crnn.onnx"), "Bundled model file is missing");
 });
 
-test("host match patterns remain scoped to the configured HTTPS ERP host", () => {
+test("host match patterns remain limited to the ERP and KL Sync HTTPS login origins", () => {
   const manifest = JSON.parse(read("manifest.json"));
-  const expectedPattern = "https://newerp.kluniversity.in/*";
-  const patterns = [
-    ...(manifest.content_scripts ?? []).flatMap((item) => item.matches ?? []),
-    ...(manifest.web_accessible_resources ?? []).flatMap((item) => item.matches ?? [])
+  const expectedPatterns = [
+    "https://newerp.kluniversity.in/*",
+    "https://klhb.vercel.app/*"
   ];
-  assert.ok(patterns.length > 0, "At least one explicit match pattern is required");
-  for (const pattern of patterns) assert.equal(pattern, expectedPattern);
+  assert.deepEqual(manifest.content_scripts?.[0]?.matches, expectedPatterns);
+  assert.deepEqual(manifest.web_accessible_resources?.[0]?.matches, expectedPatterns);
   assert.deepEqual(manifest.permissions ?? [], []);
   assert.deepEqual(manifest.host_permissions ?? [], []);
 });
