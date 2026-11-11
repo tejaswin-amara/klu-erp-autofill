@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "KLU ERP Captcha Auto-Fill",
-  "version": "1.0.3",
-  "description": "Uses a bundled model for local CAPTCHA recognition and autofill. Verify the result before submitting the ERP form.",
+  "version": "1.0.4",
+  "description": "Uses on-device CAPTCHA recognition for KLU ERP and KL Sync. Review the result; it never submits login forms.",
   "content_scripts": [
     {
       "matches": [
-        "https://newerp.kluniversity.in/*"
+        "https://newerp.kluniversity.in/*",
+        "https://klhb.vercel.app/*"
       ],
       "js": [
         "lib/ort.min.js",
@@ -23,7 +24,8 @@
         "lib/ort-wasm-simd.wasm"
       ],
       "matches": [
-        "https://newerp.kluniversity.in/*"
+        "https://newerp.kluniversity.in/*",
+        "https://klhb.vercel.app/*"
       ]
     }
   ],
