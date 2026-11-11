@@ -6,6 +6,13 @@ Notable project changes are documented here. Entries describe repository changes
 
 No unreleased changes are documented yet.
 
+## [1.0.4]
+
+- Add exact-origin support for the KL Sync Student Portal login page.
+- Reuse the refresh-aware local CRNN inference pipeline with KL Sync's CAPTCHA image and React-controlled input IDs.
+- Preserve manual edits, stale-inference rejection, and manual login submission; the extension never submits forms.
+- Add regression coverage for KL Sync selectors and exact host scope.
+
 ## [1.0.3]
 
 - Add dependency-free Node.js structural regression checks and Python packaging tests.
