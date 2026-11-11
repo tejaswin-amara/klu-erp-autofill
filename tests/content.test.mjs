@@ -89,6 +89,8 @@ function createHarness({ blankIndex = 0, runImpl, initialImage = createImage(), 
   const document = {
     documentElement,
     querySelectorAll(selector) {
+      if (selector.startsWith("img#kl-sync-captcha-image")) return currentImage ? [currentImage] : [];
+      if (selector.startsWith("input#captcha-field")) return currentInput ? [currentInput] : [];
       if (selector.startsWith("img#loginFormCaptcha-image")) return currentImage ? [currentImage] : [];
       if (selector.startsWith("input#loginFormCaptcha")) return currentInput ? [currentInput] : [];
       return nodes.get(selector) || [];
@@ -216,6 +218,20 @@ test("selector fallback priority is independent of document order", async () => 
   assert.equal(preferred.listeners.get("load")?.size, 1);
   assert.equal(lowerPriority.listeners.get("load")?.size || 0, 0);
   await harness.waitForRun(0);
+});
+
+test("KL Sync login page selectors auto-fill the React-controlled code field without submitting the form", async () => {
+  const harness = createHarness({ runImpl: undefined });
+  await harness.waitForValue("aaaa");
+
+  assert.equal(harness.image.listeners.get("load")?.size, 1);
+  assert.equal(harness.input.value, "aaaa");
+  assert.ok(harness.input.listeners.get("input")?.size > 0);
+  assert.ok(harness.input.listeners.get("change")?.size > 0);
+  assert.equal(
+    /\\b(?:form|HTMLFormElement)\\s*\\.\\s*(?:submit|requestSubmit)\\s*\\(/i.test(CONTENT_SCRIPT),
+    false
+  );
 });
 
 test("latest image is processed after an actual in-flight inference becomes obsolete", async () => {
