@@ -6,12 +6,16 @@
   ort.env.wasm.numThreads = 1;
 
   const IMG_SELECTORS = [
+    // KL Sync renders the upstream ERP image into its own login form.
+    'img#kl-sync-captcha-image',
     'img#loginFormCaptcha-image',
     'img#loginform-verifycode-image',
     'img[src*="r=site/captcha"]',
     'img[src*="captcha"]'
   ];
   const INPUT_SELECTORS = [
+    // React-controlled KL Sync login field; input/change events are dispatched below.
+    'input#captcha-field',
     'input#loginFormCaptcha',
     'input[name="LoginForm[captcha]"]',
     'input#loginform-verifycode',
