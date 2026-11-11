@@ -4,7 +4,7 @@
 <div align="center">
   <img src="assets/readme-banner.svg" alt="KLU ERP Auto-Fill — Chrome extension for local CAPTCHA recognition" width="100%">
 
-  <p><strong>A focused Chrome extension for the KL University ERP login page.</strong></p>
+  <p><strong>On-device CAPTCHA assistance for KL University ERP and the KL Sync Student Portal.</strong></p>
   <p>Recognize CAPTCHA text in-browser with a bundled CRNN model, ONNX Runtime Web, and WebAssembly.</p>
 
   <p>
@@ -42,7 +42,7 @@
   <tr>
     <td width="50%">
       <strong>🎯 Narrow website scope</strong><br>
-      The content script is configured for the KLU ERP hostname.
+      The content script is scoped to the KLU ERP and KL Sync production HTTPS origins.
     </td>
     <td width="50%">
       <strong>🧩 Minimal setup</strong><br>
@@ -170,9 +170,21 @@ Enable **Developer mode**.
 
 **Keep the folder intact.** The model, runtime, WebAssembly assets, icons, and banner use paths within the project.
 
+### 4. Use it with KL Sync
+
+The same extension also supports the KL Sync Student Portal at
+[https://klhb.vercel.app](https://klhb.vercel.app). Install or reload version
+**1.0.4 or newer**, open the KL Sync login page, and wait for the recognition
+result to populate the security-code field. The extension uses the same
+refresh-aware, on-device CRNN pipeline and does not submit the login form.
+
+Review the suggested code and complete the separate browser-verification
+widget and login action yourself. If the extension is not installed, the
+normal manual CAPTCHA input remains available.
+
 ### 4. Test on the ERP page
 
-1. Open [KLU ERP](https://newerp.kluniversity.in/).
+1. Open [KLU ERP](https://newerp.kluniversity.in/) or [KL Sync](https://klhb.vercel.app/).
 2. Ensure the extension is enabled.
 3. Reload the ERP tab.
 4. Check whether the verification field is populated.
@@ -182,7 +194,7 @@ Enable **Developer mode**.
 
 | Setting | Current implementation |
 | --- | --- |
-| Target URL | `https://newerp.kluniversity.in/*` |
+| Target URLs | `https://newerp.kluniversity.in/*` and `https://klhb.vercel.app/*` |
 | Extension format | Chrome Manifest V3 |
 | Model file | `model/crnn.onnx` |
 | Model metadata | `model/crnn.json` |
@@ -199,7 +211,7 @@ The recognition pipeline uses the model and runtime bundled with the extension a
 
 - **Console logging:** The current content script writes caught runtime errors to the browser console. It does not explicitly log the recognized string. Error details may still contain technical information, so redact console output before sharing it.
 - **Credentials:** The extension is intended to fill the verification field, not to collect or manage account credentials. Review the source before installing or distributing a modified build.
-- **Scope:** Review `manifest.json` before changing the domain on which the content script can run.
+- **Scope:** The manifest grants content-script execution only to `newerp.kluniversity.in` and the production `klhb.vercel.app` host. Review `manifest.json` before adding any other origin.
 - **Accuracy:** Recognition can be incorrect. Check the result before submitting.
 - **Responsible use:** CAPTCHA is an anti-automation control. Use this project only where authorized by the institution and the website's applicable policies.
 
@@ -210,7 +222,7 @@ For more detail, see the [privacy notes](docs/PRIVACY.md) and [security policy](
 <details>
 <summary><strong>The verification field is not populated</strong></summary>
 
-- Confirm that you are on [KLU ERP](https://newerp.kluniversity.in/).
+- Confirm that you are on [KLU ERP](https://newerp.kluniversity.in/) or the production [KL Sync](https://klhb.vercel.app/) login page.
 - Ensure the extension is enabled.
 - Reload the extension at `chrome://extensions`, then reload the ERP tab.
 - Check that the model and runtime assets exist at the expected paths.
