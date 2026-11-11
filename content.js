@@ -312,7 +312,7 @@
           }
           const code = ctcGreedyDecode(logits.data, timeSteps, classCount, meta.alphabet, meta.blank_idx);
 
-          if (code.length >= 4 && code.length <= timeSteps &&
+          if (code.length >= 4 && code.length <= 7 && code.length <= timeSteps &&
               operationIsCurrent(generation, image, input, source, inputValueAtStart) &&
               !inputWasEdited && (input.value === "" || input.value === lastWrittenValue)) {
             fillInput(input, code);
