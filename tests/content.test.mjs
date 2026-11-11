@@ -228,10 +228,8 @@ test("KL Sync login page selectors auto-fill the React-controlled code field wit
   assert.equal(harness.input.value, "aaaa");
   assert.ok(harness.input.listeners.get("input")?.size > 0);
   assert.ok(harness.input.listeners.get("change")?.size > 0);
-  assert.equal(
-    /\\b(?:form|HTMLFormElement)\\s*\\.\\s*(?:submit|requestSubmit)\\s*\\(/i.test(CONTENT_SCRIPT),
-    false
-  );
+  assert.equal(CONTENT_SCRIPT.includes("requestSubmit("), false);
+  assert.equal(CONTENT_SCRIPT.includes(".submit("), false);
 });
 
 test("latest image is processed after an actual in-flight inference becomes obsolete", async () => {
