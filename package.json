@@ -1,0 +1,14 @@
+{
+  "name": "klu-erp-autofill",
+  "version": "1.0.4",
+  "private": true,
+  "description": "On-device CAPTCHA autofill for KLU ERP and KL Sync, with structural and reproducible packaging checks.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:package": "node -e \"const {spawnSync}=require('node:child_process');for(const cmd of ['python3','python']){const r=spawnSync(cmd,['-m','unittest','discover','-s','tests','-p','test_*.py'],{stdio:'inherit'});if(!r.error)process.exit(r.status??1);}process.exit(1);\"",
+    "check": "npm test && npm run test:package"
+  }
+}

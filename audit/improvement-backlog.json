@@ -1,0 +1,341 @@
+{
+  "repository": "https://github.com/tejaswin-amara/klu-erp-autofill",
+  "targetBranch": "main",
+  "implementationHeadSha": "6c5c364573023e3b4566ab1166bf11f2033cd9fb",
+  "observedCi": [
+    {
+      "runId": 42003762852,
+      "url": "https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003762852",
+      "event": "push",
+      "conclusion": "success",
+      "nodeTestsPassed": 18,
+      "nodeTestsFailed": 0,
+      "pythonPackagingTestsPassed": 14,
+      "releaseZipBuilt": true,
+      "artifactUploaded": true,
+      "releaseZipSha256": "159c07a4b36326b6ff842a74c6fbfd274fd091945deda03629f0e6f986614b61"
+    },
+    {
+      "runId": 42003777393,
+      "url": "https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003777393",
+      "event": "pull_request",
+      "conclusion": "success",
+      "nodeTestsPassed": 18,
+      "nodeTestsFailed": 0,
+      "pythonPackagingTestsPassed": 14,
+      "releaseZipBuilt": true,
+      "artifactUploaded": true,
+      "releaseZipSha256": "159c07a4b36326b6ff842a74c6fbfd274fd091945deda03629f0e6f986614b61"
+    },
+    {
+      "runId": 42952985426,
+      "url": "https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42952985426",
+      "event": "pull_request",
+      "conclusion": "success",
+      "nodeTestsPassed": 21,
+      "nodeTestsFailed": 0,
+      "pythonPackagingTestsPassed": 14,
+      "releaseZipBuilt": true,
+      "artifactUploaded": true,
+      "releaseZipSha256": "093d5e3cde6cd379339ad1ff8b108e4815a4f2e5086ceac9ec88e76372bcc7da"
+    }
+  ],
+  "tasks": [
+    {
+      "taskId": "TASK-001",
+      "findingIds": [
+        "ENV-001"
+      ],
+      "title": "Verify historical baseline and current CI evidence",
+      "priority": "P1",
+      "status": "complete",
+      "targetFiles": [
+        "package.json",
+        "tests",
+        "audit/improvement-backlog.json"
+      ],
+      "dependencies": [],
+      "effort": "XS",
+      "verification": "Historical baseline retained; PR #5 CI runs #47/#48 and PR #6 CI runs 42952982607/42952985426 verified alongside full local Node/Python/WASM execution.",
+      "acceptanceCriteria": [
+        "Historical SHA and test counts are labeled historical",
+        "Current implementation SHA and CI evidence are recorded",
+        "Remote CI is not misrepresented as local execution"
+      ]
+    },
+    {
+      "taskId": "TASK-002",
+      "findingIds": [
+        "AUDIT-003",
+        "AUDIT-007"
+      ],
+      "title": "Verify ONNX graph, decoder mapping, and model preprocessing provenance",
+      "priority": "P1",
+      "status": "complete",
+      "targetFiles": [
+        "model/crnn.json",
+        "model/crnn.onnx",
+        "content.js",
+        "tests/content.test.mjs",
+        "tests/repository.test.mjs"
+      ],
+      "dependencies": [
+        "Authoritative model graph access",
+        "Original model/training preprocessing evidence"
+      ],
+      "effort": "M",
+      "verification": "Binary ONNX ModelProto parsed (ir_version=7, producer=pytorch 2.5.1, opset=14, input=float32[batch,1,50,120], logits=float32[batch,30,27], fc.bias[0]=-2.9399 confirming blank_idx=0); historical commit 0819c2734485b2e60ef687492155d0f90640145b documents transparent-PNG alpha-channel preprocessing; verified by automated protobuf and WASM tests.",
+      "acceptanceCriteria": [
+        "Actual graph names/ranks/dimensions validated",
+        "Blank/class mapping confirmed against graph",
+        "Preprocessing changes supported by training evidence",
+        "Unknown facts remain explicitly unresolved"
+      ]
+    },
+    {
+      "taskId": "TASK-003",
+      "findingIds": [
+        "AUDIT-001",
+        "AUDIT-002",
+        "AUDIT-010"
+      ],
+      "title": "Fix async lifecycle, selector priority, DOM replacement, and listener cleanup",
+      "priority": "P1",
+      "status": "complete",
+      "targetFiles": [
+        "content.js",
+        "tests/content.test.mjs"
+      ],
+      "dependencies": [
+        "Synthetic DOM and deferred inference"
+      ],
+      "effort": "M",
+      "verification": "Single-flight drain loop, CSS/hidden/non-text input filtering, in-place load re-solve, empty-input edit reset, KL Sync + ERP selector coverage.",
+      "acceptanceCriteria": [
+        "No latest update is lost",
+        "Obsolete inference never applies",
+        "Selector priority is deterministic",
+        "Replaced listeners are removed",
+        "Manual user input is preserved"
+      ]
+    },
+    {
+      "taskId": "TASK-004",
+      "findingIds": [
+        "AUDIT-005"
+      ],
+      "title": "Harden packaging and isolate negative-path tests",
+      "priority": "P2",
+      "status": "complete",
+      "targetFiles": [
+        "scripts/package_extension.py",
+        "tests/test_package_extension.py"
+      ],
+      "dependencies": [],
+      "effort": "S",
+      "verification": "16 Python packaging tests pass; includes manifest reference allowlist verification, symlink/traversal rejection, and rollback.",
+      "acceptanceCriteria": [
+        "Path-aware containment",
+        "Symlinks and traversal rejected",
+        "Temporary files unique and isolated",
+        "Archive/checksum failure rollback tested",
+        "Deterministic packaging retained"
+      ]
+    },
+    {
+      "taskId": "TASK-005",
+      "findingIds": [
+        "AUDIT-004"
+      ],
+      "title": "Add production-logic behavior tests",
+      "priority": "P1",
+      "status": "complete",
+      "targetFiles": [
+        "content.js",
+        "tests/content.test.mjs"
+      ],
+      "dependencies": [
+        "Synthetic browser API harness"
+      ],
+      "effort": "M",
+      "verification": "25 Node tests pass, including synthetic DOM lifecycle, metadata failure recovery, decoder bounds, and real ONNX Runtime Web v1.16.3 WASM execution.",
+      "acceptanceCriteria": [
+        "Tests exercise production code",
+        "No production ERP endpoints",
+        "Deferred inference completes deterministically",
+        "Test assertions observe DOM state"
+      ]
+    },
+    {
+      "taskId": "TASK-006",
+      "findingIds": [
+        "AUDIT-006"
+      ],
+      "title": "Validate maintained Markdown links and local fragments",
+      "priority": "P2",
+      "status": "complete",
+      "targetFiles": [
+        "tests/repository.test.mjs",
+        "AUDIT_REPORT.md",
+        "FINAL_REPORT.md",
+        "PR_VERIFICATION_REPORT.md",
+        "IMPROVEMENT_BACKLOG.md"
+      ],
+      "dependencies": [
+        "Maintained documentation list"
+      ],
+      "effort": "S",
+      "verification": "All relative Markdown links and heading/anchor fragments across maintained docs verified by Node test suite.",
+      "acceptanceCriteria": [
+        "Audit and final reports included",
+        "Relative paths resolve",
+        "Supported heading fragments resolve"
+      ]
+    },
+    {
+      "taskId": "TASK-007",
+      "findingIds": [
+        "AUDIT-008",
+        "AUDIT-011"
+      ],
+      "title": "Verify Chromium extension and WASM compatibility",
+      "priority": "P2",
+      "status": "partial",
+      "targetFiles": [
+        "manifest.json",
+        "content.js",
+        "lib/ort.min.js",
+        "lib/ort-wasm-simd.wasm",
+        "README.md"
+      ],
+      "dependencies": [
+        "Working headless browser environment"
+      ],
+      "effort": "S",
+      "verification": "Headless Chromium 156.0.8078.73 smoke test verified OffscreenCanvas, ort.min.js v1.16.3, ort-wasm-simd.wasm, crnn.onnx, and content.js end-to-end on a synthetic fixture; interactive chrome://extensions unpacked loading remains manual.",
+      "acceptanceCriteria": [
+        "Browser version recorded",
+        "Extension load and resource resolution tested",
+        "Only observed compatibility claims documented"
+      ]
+    },
+    {
+      "taskId": "TASK-008",
+      "findingIds": [
+        "AUDIT-009"
+      ],
+      "title": "Verify runtime, model, and asset provenance and redistribution rights",
+      "priority": "P2",
+      "status": "partial",
+      "targetFiles": [
+        "THIRD_PARTY_NOTICES.md",
+        "NOTICE",
+        "lib/ort.min.js",
+        "lib/ort-wasm-simd.wasm",
+        "model/crnn.onnx",
+        "icons"
+      ],
+      "dependencies": [
+        "Official runtime release metadata",
+        "Original model source/license",
+        "Asset source records"
+      ],
+      "effort": "M",
+      "verification": "Verified ONNX Runtime Web v1.16.3 (MIT) and recorded SHA-256 digests, PyTorch 2.5.1 export metadata, and historical icon script provenance; external model training dataset license remains unresolved.",
+      "acceptanceCriteria": [
+        "Runtime version supported by evidence",
+        "Required notices complete",
+        "Model and asset rights evidenced or explicitly unresolved"
+      ]
+    },
+    {
+      "taskId": "TASK-009",
+      "findingIds": [
+        "AUDIT-005"
+      ],
+      "title": "Maintain CI packaging and artifact traceability",
+      "priority": "P2",
+      "status": "complete",
+      "targetFiles": [
+        ".github/workflows/ci.yml",
+        "scripts/package_extension.py",
+        "tests/test_package_extension.py"
+      ],
+      "dependencies": [],
+      "effort": "S",
+      "verification": "All GitHub Actions pinned to 40-char commit SHAs with persist-credentials: false; check_pins.py and verify_agent_safety.py pass.",
+      "acceptanceCriteria": [
+        "CI fails on test errors",
+        "Archive contents validated",
+        "Checksums match exact bytes",
+        "Artifact is associated with tested commit"
+      ]
+    },
+    {
+      "taskId": "TASK-010",
+      "findingIds": [
+        "HIST-001"
+      ],
+      "title": "Review Git history for actual sensitive-data exposure",
+      "priority": "P3",
+      "status": "complete",
+      "targetFiles": [
+        "Git history"
+      ],
+      "dependencies": [
+        "Full history access"
+      ],
+      "effort": "S",
+      "verification": "Inspected all 38 historical commits across main and feat/kl-sync-captcha-support (from root 55f92d25fb39f3066325976f7b1cb88496554a64); confirmed zero private keys, student credentials, or live tokens (only public Web Store ID nlehogaopgpmhideimmccgohnjaepnom, local Windows paths in 0819c273, and public OCR.space demo key 'helloworld' in 3dafc752).",
+      "acceptanceCriteria": [
+        "Actual credentials distinguished from public IDs and paths",
+        "No unnecessary history rewriting",
+        "Real active-secret exposure escalated"
+      ]
+    },
+    {
+      "taskId": "TASK-011",
+      "findingIds": [
+        "ENV-001"
+      ],
+      "title": "Record direct local verification limitations",
+      "priority": "P2",
+      "status": "complete",
+      "targetFiles": [
+        "Entire repository"
+      ],
+      "dependencies": [
+        "Full local checkout and network"
+      ],
+      "effort": "S",
+      "verification": "Executed full local test suite (25 Node tests, 16 Python tests, deterministic ZIP build, headless Chromium 156 smoke test, and engineering-pipeline gate scripts) alongside remote GitHub Actions CI.",
+      "acceptanceCriteria": [
+        "Local execution distinguished from remote CI",
+        "Full current-head tests evidenced by workflow"
+      ]
+    },
+    {
+      "taskId": "TASK-012",
+      "findingIds": [
+        "AUDIT-011"
+      ],
+      "title": "Evaluate dynamic web-accessible resource URLs only if justified",
+      "priority": "P3",
+      "status": "optional",
+      "targetFiles": [
+        "manifest.json",
+        "content.js"
+      ],
+      "dependencies": [
+        "Controlled browser evidence"
+      ],
+      "effort": "S",
+      "verification": "No change justified; restrictive explicit HTTPS host matches preserved.",
+      "acceptanceCriteria": [
+        "Concrete risk demonstrated",
+        "Resource resolution verified",
+        "No speculative manifest expansion"
+      ]
+    }
+  ]
+}
