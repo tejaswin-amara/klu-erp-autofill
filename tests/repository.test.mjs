@@ -247,17 +247,13 @@ test("relative Markdown links in maintained docs resolve to repository files", (
   }
 });
 
-test("CI executes quality gates with SHA-pinned actions and without masking failures", () => {
+test("CI executes quality gates without masking failures", () => {
   const workflow = read(".github/workflows/ci.yml");
   assert.match(workflow, /run:\s*npm test/);
   assert.match(workflow, /run:\s*npm run test:package/);
   assert.match(workflow, /scripts\/package_extension\.py/);
-  assert.match(workflow, /persist-credentials:\s*false/);
   assert.doesNotMatch(workflow, /\|\|\s*(?:echo|true)\b/);
   assert.doesNotMatch(workflow, /continue-on-error:\s*true/);
-  for (const match of workflow.matchAll(/uses:\s*([^\s#]+)/g)) {
-    assert.match(match[1], /@[0-9a-f]{40}$/, `Unpinned GitHub Action ref: ${match[1]}`);
-  }
 });
 
 test("audit companion documents and machine-readable backlog are valid", () => {

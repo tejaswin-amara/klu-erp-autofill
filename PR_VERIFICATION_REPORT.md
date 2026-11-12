@@ -4,7 +4,7 @@
 
 - **Repository:** https://github.com/tejaswin-amara/klu-erp-autofill
 - **PR #5 (merged to `main`):** https://github.com/tejaswin-amara/klu-erp-autofill/pull/5 (`76165b4cc018bcf465c3af811e1ac95ab772016a`)
-- **PR #6 (KL Sync support):** https://github.com/tejaswin-amara/klu-erp-autofill/pull/6 (`6c5c364573023e3b4566ab1166bf11f2033cd9fb`)
+- **PR #6 (merged to `main`):** https://github.com/tejaswin-amara/klu-erp-autofill/pull/6 (`6c5c364573023e3b4566ab1166bf11f2033cd9fb`)
 - **CI runs verified:**
   - PR #5 push run [#47](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003762852) — success
   - PR #5 pull-request run [#48](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003777393) — success
@@ -21,7 +21,6 @@
 | ONNX graph & WASM execution | Dynamic session input/output names (`input`, `logits`); binary ONNX ModelProto verification (`[batch, 1, 50, 120]` → `[batch, 30, 27]`, PyTorch 2.5.1, opset 14, `fc.bias[0] = -2.9399`); end-to-end WASM inference test with bundled `lib/ort.min.js` v1.16.3 | `tests/repository.test.mjs`, `tests/content.test.mjs` |
 | CTC & metadata validation | Validates `blank_idx <= alphabet.length` before session creation, tensor rank/length, class count, blank index, 4–7 character output bounds, and finite logits | `content.js`, `tests/content.test.mjs` |
 | Packaging & manifest allowlist | Component-aware path checks, symlink rejection, manifest-reference allowlist validation, unique staging, lock, staged integrity validation, rollback | `scripts/package_extension.py`, `tests/test_package_extension.py` |
-| CI workflow hardening | All GitHub Actions pinned to 40-char commit SHAs with `persist-credentials: false` and `timeout-minutes: 10`; passes `check_pins.py` and `verify_agent_safety.py` | `.github/workflows/ci.yml`, `tests/repository.test.mjs` |
 
 ## C. Local and CI test results
 
@@ -30,7 +29,7 @@
 | Node structural, ONNX graph, DOM lifecycle, and WASM tests (`npm test`) | 25 passed, 0 failed |
 | Python packaging and manifest-allowlist tests (`npm run test:package`) | 16 passed, 0 failed |
 | Headless Chromium `156.0.8078.73` synthetic page + WASM SIMD smoke test | Passed |
-| `engineering-pipeline` `verify_agent_safety.py --scan` & `check_pins.py` | Passed (0 findings at/above medium) |
+| `engineering-pipeline` `verify_agent_safety.py --scan` | Passed (0 findings) |
 | Deterministic release ZIP generation (`scripts/package_extension.py`) | Passed (`093d5e3cde6cd379339ad1ff8b108e4815a4f2e5086ceac9ec88e76372bcc7da`) |
 
 ## D. Browser verification (`TASK-007`)
@@ -47,4 +46,4 @@
 
 ## F. Final assessment
 
-All source-code, lifecycle, selector-eligibility, ONNX graph contract, WASM runtime, packaging, CI SHA-pinning, and documentation checks are implemented and verified by automated tests.
+All source-code, lifecycle, selector-eligibility, ONNX graph contract, WASM runtime, packaging, and documentation checks are implemented and verified by automated tests.
