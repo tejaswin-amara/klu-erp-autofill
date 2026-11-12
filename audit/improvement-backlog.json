@@ -263,7 +263,7 @@
       ],
       "dependencies": [],
       "effort": "S",
-      "verification": "GitHub Actions workflow runs structural + packaging checks and uploads ZIP + SHA-256 sidecar.",
+      "verification": "All GitHub Actions pinned to 40-char commit SHAs with persist-credentials: false; check_pins.py and verify_agent_safety.py pass.",
       "acceptanceCriteria": [
         "CI fails on test errors",
         "Archive contents validated",

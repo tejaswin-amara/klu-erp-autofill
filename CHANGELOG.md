@@ -13,6 +13,7 @@ No unreleased changes are documented yet.
 - Harden element eligibility and lifecycle handling: skip `hidden`, `aria-hidden="true"`, CSS-invisible (`display: none`, `visibility: hidden`, `opacity: 0`), and non-text `<input>` elements; reset `lastSolvedSrc` on in-place image `load` events; re-enable autofill when a manually edited input is cleared back to empty; and validate `blank_idx <= alphabet.length` during metadata loading.
 - Preserve manual edits, stale-inference rejection, 4–7 character output bounds, and manual login submission; the extension never submits forms.
 - Validate in `scripts/package_extension.py` that every asset referenced in `manifest.json` is present in `RELEASE_FILES`.
+- Pin all GitHub Actions in `.github/workflows/ci.yml` to immutable 40-character commit SHAs with `persist-credentials: false` and job timeouts.
 - Add automated Node.js tests for the binary `model/crnn.onnx` protobuf graph contract, real `lib/ort.min.js` v1.16.3 + `lib/ort-wasm-simd.wasm` WASM inference execution, metadata failure recovery, and CSS/input-type eligibility.
 
 ## [1.0.3]

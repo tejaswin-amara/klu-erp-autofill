@@ -1,7 +1,7 @@
 # Improvement Backlog — KLU ERP Auto-Fill
 
 **Repository:** https://github.com/tejaswin-amara/klu-erp-autofill  
-**PRs:** [#5](https://github.com/tejaswin-amara/klu-erp-autofill/pull/5) (merged), [#6](https://github.com/tejaswin-amara/klu-erp-autofill/pull/6) (merged)  
+**PRs:** [#5](https://github.com/tejaswin-amara/klu-erp-autofill/pull/5) (merged), [#6](https://github.com/tejaswin-amara/klu-erp-autofill/pull/6)  
 **Target:** `main`  
 **Latest verified commits:** `76165b4cc018bcf465c3af811e1ac95ab772016a` (`main`), `6c5c364573023e3b4566ab1166bf11f2033cd9fb` (`feat/kl-sync-captcha-support`)  
 **Observed CI:** [Run #48 — success](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003777393), [Run 42952985426 — success](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42952985426)
@@ -29,7 +29,7 @@ The original audit baseline (`682d1b7f53294a81e57b721eafe5d6259ef787e5`) remains
 | TASK-006 | AUDIT-006 | Validate maintained Markdown links and local fragments | P2 | complete | Relative links and local heading/anchor fragments validated across all maintained Markdown documents |
 | TASK-007 | AUDIT-008 | Verify Chromium/ONNX Runtime/WASM compatibility | P2 | partial | Headless Chromium `156.0.8078.73` (`HeadlessChrome/156.0.0.0`) smoke test verified `OffscreenCanvas`, `ort.min.js` v1.16.3, `ort-wasm-simd.wasm`, `crnn.onnx`, and `content.js` on a synthetic fixture; interactive `chrome://extensions` unpacked load remains manual |
 | TASK-008 | AUDIT-009 | Verify runtime, model, and asset provenance/licensing | P2 | partial | Verified ONNX Runtime Web `v1.16.3` (MIT), SHA-256 digests, PyTorch 2.5.1 export metadata, and historical `icons/make_icons.py` provenance in `THIRD_PARTY_NOTICES.md`; external training dataset license remains unresolved |
-| TASK-009 | AUDIT-005 | CI artifact traceability and package verification | P2 | complete | GitHub Actions workflow runs structural + packaging checks and uploads ZIP + SHA-256 sidecar |
+| TASK-009 | AUDIT-005 | CI artifact traceability and package verification | P2 | complete | GitHub Actions pinned to 40-char commit SHAs with `persist-credentials: false`; `check_pins.py` and `verify_agent_safety.py` pass |
 | TASK-010 | HIST-001 | Review Git history for actual sensitive-data exposure | P3 | complete | Audited all 38 historical commits (`55f92d25`..`6c5c3645`); confirmed zero private keys, student credentials, or live tokens |
 | TASK-011 | ENV-001 | Repeat direct local full-repository verification | P2 | complete | Full local verification executed: 25 Node tests, 16 Python packaging tests, deterministic ZIP build (`093d5e3cde6cd379339ad1ff8b108e4815a4f2e5086ceac9ec88e76372bcc7da`), and headless Chromium 156 smoke test |
 | TASK-012 | AUDIT-011 | Evaluate dynamic web-accessible resource URLs | P3 | optional | Leave disabled unless controlled browser evidence establishes a benefit |
@@ -42,6 +42,7 @@ The original audit baseline (`682d1b7f53294a81e57b721eafe5d6259ef787e5`) remains
 - User-entered non-empty input is preserved, while clearing the input back to empty restores automatic filling on subsequent CAPTCHA refreshes.
 - ONNX input/output names are obtained from session metadata (`input` and `logits`), and `model/crnn.onnx` binary graph dimensions are verified in `tests/repository.test.mjs`.
 - Package paths use path-aware containment checks, reject symlink components, and verify that every file referenced in `manifest.json` is present in `RELEASE_FILES`.
+- GitHub Actions workflows pin all actions to 40-character commit SHAs and disable credential persistence.
 
 ## Release limitations
 

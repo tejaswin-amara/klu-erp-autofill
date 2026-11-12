@@ -4,7 +4,7 @@
 
 This report consolidates the initial audit (`682d1b7f53294a81e57b721eafe5d6259ef787e5`), the PR #5 remediation (`76165b4cc018bcf465c3af811e1ac95ab772016a`), the PR #6 KL Sync integration (`6c5c364573023e3b4566ab1166bf11f2033cd9fb`), and the v1.0.4 engineering-pipeline verification and hardening pass.
 
-**Pull requests:** [PR #5](https://github.com/tejaswin-amara/klu-erp-autofill/pull/5) (merged), [PR #6](https://github.com/tejaswin-amara/klu-erp-autofill/pull/6) (merged)  
+**Pull requests:** [PR #5](https://github.com/tejaswin-amara/klu-erp-autofill/pull/5) (merged), [PR #6](https://github.com/tejaswin-amara/klu-erp-autofill/pull/6)  
 **Base branch:** `main`  
 **Observed CI:** [Run #48 — success](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42003777393), [Run 42952985426 — success](https://github.com/tejaswin-amara/klu-erp-autofill/actions/runs/42952985426)
 
@@ -21,6 +21,7 @@ The repository implementation now includes:
 - Metadata (`blank_idx <= alphabet.length`), tensor shape, CTC class-count, blank-index, output length (`4..7`), and finite-logit validation.
 - Dynamic ONNX input/output names (`input` and `logits`) obtained from the created inference session, backed by binary ONNX ModelProto verification in `tests/repository.test.mjs` and real WASM execution in `tests/content.test.mjs`.
 - Path-aware packaging validation, symlink rejection, manifest-reference allowlist verification, unique staging files, archive integrity checks, concurrency locking, checksum validation, and rollback for publication failures.
+- GitHub Actions workflow hardened with non-persistent checkout tokens, `timeout-minutes: 10`, and 40-character commit SHA pins (`actions/checkout`, `actions/setup-node`, `actions/setup-python`, `actions/upload-artifact`).
 
 ## 3. Test, pipeline, and CI results
 
@@ -32,6 +33,7 @@ All local verification suites and `engineering-pipeline` v3.1.0 gates succeeded:
 | Python packaging integrity and manifest-allowlist tests (`npm run test:package`) | 16 passed, 0 failed |
 | Headless Chromium `156.0.8078.73` (`HeadlessChrome/156.0.0.0`) WASM + `OffscreenCanvas` smoke test | Passed (`ort.min.js` v1.16.3, `crnn.onnx` → `"kllrnp"`) |
 | `engineering-pipeline` `verify_agent_safety.py --selftest` & `--scan` | Passed (15/15 canaries; 0 repo findings) |
+| `engineering-pipeline` `check_pins.py` | Passed (0 high/medium findings) |
 | Deterministic release ZIP generation (`scripts/package_extension.py`) | Passed (21 files including `CHECKSUMS.sha256`) |
 
 The deterministic release ZIP SHA-256 is:
